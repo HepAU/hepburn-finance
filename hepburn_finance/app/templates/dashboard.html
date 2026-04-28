@@ -124,6 +124,7 @@
     <div class="accounts-grid">
       {% for a in accs %}
       <div class="account-card{% if a.id in selected_ids %} selected{% endif %}" data-id="{{ a.id }}">
+        <a class="acc-edit" href="{{ url_for('main.edit_account', aid=a.id) }}" title="Edit account" onclick="event.stopPropagation()">✎</a>
         <div class="acc-header-row">
           <span class="acc-type-tag {{ a.type }}">
             {% if a.type == 'ppor' %}PPOR{% else %}{{ a.type }}{% endif %}
@@ -201,7 +202,7 @@
             <div class="bill-amount {% if b.amount < 0 %}negative{% else %}positive{% endif %}">
               {{ fmt_money(b.amount) }}
             </div>
-            <div></div>
+            <a class="bill-edit" href="{{ url_for('main.edit_bill', bid=b.id) }}" title="Edit bill">✎</a>
           </li>
           {% else %}
           <li style="padding: 8px 0; color: var(--text-3); font-size: 13px;">No bills in the next 14 days.</li>

@@ -7,7 +7,13 @@ from app.routes import bp
 
 
 class IngressMiddleware:
-    """WSGI middleware to make Flask aware of the HA Ingress path prefix."""
+    """WSGI middleware to make Flask aware of the HA Ingress path prefix.
+
+    HA Ingress sends an `X-Ingress-Path` header on every request — that's the
+    base path the user hits (e.g. /api/hassio_ingress/abc123). For url_for()
+    to generate working links, we need to set SCRIPT_NAME so Flask thinks
+    the app is mounted at that prefix.
+    """
     def __init__(self, app):
         self.app = app
 
@@ -26,6 +32,7 @@ def create_app():
     app.secret_key = os.environ.get('FLASK_SECRET', 'hepburn-dev-secret-change-me')
     app.wsgi_app = IngressMiddleware(app.wsgi_app)
 
+    # Make cfg available to every template
     @app.context_processor
     def inject_config():
         return {
@@ -42,7 +49,8 @@ def create_app():
 
 
 def seed_initial_accounts():
-    """If the accounts table is empty, seed with the Bendigo + Latitude accounts."""
+    """If the accounts table is empty, seed with the Bendigo + Latitude
+    accounts we know about. User can edit/delete via the UI."""
     from app.database import get_db
     with get_db() as conn:
         count = conn.execute('SELECT COUNT(*) FROM accounts').fetchone()[0]
@@ -70,6 +78,7 @@ def seed_initial_accounts():
                 'VALUES (?,?,?,?,?,?,?,?,?,?)', a
             )
 
+        # Seed the interest-free plans observed in the Latitude statement
         gem_visa_id = conn.execute("SELECT id FROM accounts WHERE name='Gem Visa'").fetchone()['id']
         plans = [
             ('Penrith Auto',                'Started 20 Mar', 1529.87, 1529.87, None, '2026-10-18', 29.99),
