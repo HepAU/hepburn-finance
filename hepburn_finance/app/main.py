@@ -7,13 +7,7 @@ from app.routes import bp
 
 
 class IngressMiddleware:
-    """WSGI middleware to make Flask aware of the HA Ingress path prefix.
-
-    HA Ingress sends an `X-Ingress-Path` header on every request — that's the
-    base path the user hits (e.g. /api/hassio_ingress/abc123). For url_for()
-    to generate working links, we need to set SCRIPT_NAME so Flask thinks
-    the app is mounted at that prefix.
-    """
+    """WSGI middleware to make Flask aware of the HA Ingress path prefix."""
     def __init__(self, app):
         self.app = app
 
@@ -31,13 +25,24 @@ def create_app():
     app = Flask(__name__, static_folder='static', template_folder='templates')
     app.secret_key = os.environ.get('FLASK_SECRET', 'hepburn-dev-secret-change-me')
     app.wsgi_app = IngressMiddleware(app.wsgi_app)
+
+    @app.context_processor
+    def inject_config():
+        return {
+            'cfg': {
+                'family_name': os.environ.get('FAMILY_NAME', 'Hepburn'),
+                'primary_user': os.environ.get('PRIMARY_USER', ''),
+                'secondary_user': os.environ.get('SECONDARY_USER', ''),
+                'ai_provider': os.environ.get('AI_PROVIDER', 'none'),
+            }
+        }
+
     app.register_blueprint(bp)
     return app
 
 
 def seed_initial_accounts():
-    """If the accounts table is empty, seed with the Bendigo + Latitude
-    accounts we know about. User can edit/delete via the UI."""
+    """If the accounts table is empty, seed with the Bendigo + Latitude accounts."""
     from app.database import get_db
     with get_db() as conn:
         count = conn.execute('SELECT COUNT(*) FROM accounts').fetchone()[0]
