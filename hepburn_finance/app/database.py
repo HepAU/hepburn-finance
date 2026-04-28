@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     type TEXT NOT NULL CHECK(type IN ('transaction','savings','credit','loan','ppor')),
     balance REAL NOT NULL DEFAULT 0,
     available REAL,
+    available_redraw REAL,
     credit_limit REAL,
     interest_rate REAL,
     is_deductible INTEGER DEFAULT 0,
@@ -59,6 +60,8 @@ CREATE TABLE IF NOT EXISTS scheduled_bills (
     next_date TEXT NOT NULL,
     recurring TEXT NOT NULL DEFAULT 'monthly'
         CHECK(recurring IN ('once','weekly','fortnightly','monthly','quarterly','yearly')),
+    end_date TEXT,
+    occurrences_remaining INTEGER,
     category TEXT,
     account_id INTEGER NOT NULL,
     is_income INTEGER DEFAULT 0,
@@ -67,6 +70,27 @@ CREATE TABLE IF NOT EXISTS scheduled_bills (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (account_id) REFERENCES accounts(id)
+);
+
+CREATE TABLE IF NOT EXISTS scheduled_transfers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    amount REAL NOT NULL,
+    next_date TEXT NOT NULL,
+    recurring TEXT NOT NULL DEFAULT 'monthly'
+        CHECK(recurring IN ('once','weekly','fortnightly','monthly','quarterly','yearly')),
+    end_date TEXT,
+    occurrences_remaining INTEGER,
+    from_account_id INTEGER NOT NULL,
+    to_account_id INTEGER NOT NULL,
+    category TEXT,
+    notes TEXT,
+    active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (from_account_id) REFERENCES accounts(id),
+    FOREIGN KEY (to_account_id) REFERENCES accounts(id),
+    CHECK(from_account_id != to_account_id)
 );
 
 CREATE TABLE IF NOT EXISTS interest_free_plans (
@@ -194,11 +218,68 @@ def get_db():
         conn.close()
 
 
+def _column_exists(conn, table, column):
+    """Check if a column exists on a table."""
+    cols = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(c[1] == column for c in cols)
+
+
+def _table_exists(conn, table):
+    """Check if a table exists."""
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone()
+    return row is not None
+
+
+def run_migrations(conn):
+    """Apply schema changes for users upgrading from earlier versions.
+
+    Each migration is idempotent — safe to run repeatedly.
+    """
+    # 0.1.3: available_redraw column on accounts
+    if not _column_exists(conn, 'accounts', 'available_redraw'):
+        conn.execute('ALTER TABLE accounts ADD COLUMN available_redraw REAL')
+
+    # 0.1.3: end_date and occurrences_remaining on scheduled_bills
+    if not _column_exists(conn, 'scheduled_bills', 'end_date'):
+        conn.execute('ALTER TABLE scheduled_bills ADD COLUMN end_date TEXT')
+    if not _column_exists(conn, 'scheduled_bills', 'occurrences_remaining'):
+        conn.execute('ALTER TABLE scheduled_bills ADD COLUMN occurrences_remaining INTEGER')
+
+    # 0.1.3: scheduled_transfers table (CREATE TABLE IF NOT EXISTS in SCHEMA handles this,
+    # but we run it here too to make sure it's created on existing DBs)
+    if not _table_exists(conn, 'scheduled_transfers'):
+        conn.execute("""
+            CREATE TABLE scheduled_transfers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                amount REAL NOT NULL,
+                next_date TEXT NOT NULL,
+                recurring TEXT NOT NULL DEFAULT 'monthly'
+                    CHECK(recurring IN ('once','weekly','fortnightly','monthly','quarterly','yearly')),
+                end_date TEXT,
+                occurrences_remaining INTEGER,
+                from_account_id INTEGER NOT NULL,
+                to_account_id INTEGER NOT NULL,
+                category TEXT,
+                notes TEXT,
+                active INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (from_account_id) REFERENCES accounts(id),
+                FOREIGN KEY (to_account_id) REFERENCES accounts(id),
+                CHECK(from_account_id != to_account_id)
+            )
+        """)
+
+
 def init_db():
     """Create tables and seed default rules on first run."""
     os.makedirs(DATA_DIR, exist_ok=True)
     with get_db() as conn:
         conn.executescript(SCHEMA)
+        run_migrations(conn)
 
         # Seed category rules if table is empty
         count = conn.execute('SELECT COUNT(*) FROM category_rules').fetchone()[0]

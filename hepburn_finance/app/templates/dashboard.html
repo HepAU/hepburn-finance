@@ -29,6 +29,7 @@
     </div>
     <div class="top-actions">
       <a class="btn" href="{{ url_for('main.upload') }}">Upload CSV</a>
+      <a class="btn" href="{{ url_for('main.new_transfer') }}">+ Transfer</a>
       <a class="btn primary" href="{{ url_for('main.new_bill') }}">+ Add bill</a>
     </div>
   </div>
@@ -108,9 +109,17 @@
         <div class="debt-rate {{ d.rate_class }}">{{ d.rate }}</div>
       </div>
       {% endfor %}
+      {% if redraw_total > 0 %}
+      <div class="debt-footer">
+        <strong style="color:var(--blue);">*</strong> Investment loan interest is tax-deductible — extra repayments here earn less than paying down non-deductible debt first.
+        <br><br>
+        💧 You have <strong>{{ fmt_money(redraw_total, 0) }}</strong> in mortgage redraw available across your loans — emergency cushion only, not regular spending money.
+      </div>
+      {% else %}
       <div class="debt-footer">
         <strong style="color:var(--blue);">*</strong> Investment loan interest is tax-deductible — extra repayments here earn less than paying down non-deductible debt first.
       </div>
+      {% endif %}
     </div>
   </div>
 
@@ -119,7 +128,7 @@
   <div class="account-group">
     <div class="group-head">
       <h3>{{ bank }}</h3>
-      <span class="meta">Tap to include in calendar forecast</span>
+      <span class="meta">Tap to include in calendar forecast · pencil to edit</span>
     </div>
     <div class="accounts-grid">
       {% for a in accs %}
@@ -131,15 +140,33 @@
           </span>
         </div>
         <div class="acc-name">{{ a.name }}</div>
-        <div class="acc-balance
-          {%- if a.type in ['loan','ppor'] %} neutral
-          {%- elif a.balance == 0 %} dim
-          {%- elif a.balance < 0 %} danger
-          {%- elif a.type == 'transaction' and a.balance < 200 %} warn
-          {%- endif %}">{{ fmt_money(a.balance) }}</div>
+        {# Decide which figure is the "headline" — for transaction & credit accounts that's available;
+           for everything else (savings, loans), it's balance. #}
+        {% if a.type in ['transaction','credit'] and a.available is not none %}
+          <div class="acc-balance
+            {%- if a.available == 0 %} dim
+            {%- elif a.available < 0 %} danger
+            {%- elif a.type == 'transaction' and a.available < 100 %} warn
+            {%- endif %}">{{ fmt_money(a.available) }}</div>
+          <div class="acc-balance-secondary">
+            <span class="acc-balance-label">Balance</span> {{ fmt_money(a.balance) }}
+          </div>
+        {% else %}
+          <div class="acc-balance
+            {%- if a.type in ['loan','ppor'] %} neutral
+            {%- elif a.balance == 0 %} dim
+            {%- elif a.balance < 0 %} danger
+            {%- elif a.type == 'transaction' and a.balance < 200 %} warn
+            {%- endif %}">{{ fmt_money(a.balance) }}</div>
+          {% if a.type in ['loan','ppor'] and a.available_redraw and a.available_redraw > 0 %}
+          <div class="acc-balance-secondary">
+            <span class="acc-balance-label">Redraw</span> {{ fmt_money(a.available_redraw, 0) }}
+          </div>
+          {% endif %}
+        {% endif %}
         <div class="acc-meta">
           {% if a.account_number %}{{ a.account_number }}{% endif %}
-          {% if a.type == 'transaction' and a.available is not none %} · ${{ '%.2f'|format(a.available) }} avail{% endif %}
+          {% if a.type == 'credit' and a.credit_limit %} · ${{ '{:,.0f}'.format(a.credit_limit) }} limit{% endif %}
         </div>
       </div>
       {% endfor %}
@@ -162,6 +189,7 @@
         <div>
           <span class="legend-pill"><span class="dot bill"></span>Bill</span>
           <span class="legend-pill"><span class="dot income"></span>Income</span>
+          <span class="legend-pill"><span class="dot transfer"></span>Transfer</span>
           <span class="legend-pill" style="margin-left:12px;color:var(--text-2);">Click a day to view or add</span>
         </div>
       </div>
@@ -209,6 +237,34 @@
           {% endfor %}
         </ul>
       </div>
+
+      {% if transfers_14d %}
+      <div class="panel">
+        <div class="section-header" style="margin-bottom: 10px;">
+          <h2>Upcoming transfers</h2>
+          <span class="meta">Next 14 days</span>
+        </div>
+        <ul class="bill-list">
+          {% for t in transfers_14d[:6] %}
+          {% set days_away = (t.date - today_obj).days %}
+          <li class="bill-item">
+            <div class="bill-day transfer{% if days_away <= 3 %} urgent{% endif %}">
+              <div>
+                <div class="day-num">{{ t.date.day }}</div>
+                <div class="day-mo">{{ t.date.strftime('%b') }}</div>
+              </div>
+            </div>
+            <div class="bill-info">
+              <div class="bill-name">{{ t.name }}</div>
+              <div class="bill-cat">{{ account_name.get(t.from_account_id, '?') }} → {{ account_name.get(t.to_account_id, '?') }}</div>
+            </div>
+            <div class="bill-amount transfer">{{ fmt_money(t.amount) }}</div>
+            <a class="bill-edit" href="{{ url_for('main.edit_transfer', tid=t.id) }}" title="Edit transfer">✎</a>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
 
       <div class="panel">
         <div class="section-header" style="margin-bottom: 10px;">
@@ -320,7 +376,10 @@
     </div>
   </div>
   <ul class="popover-list" id="popover-list"></ul>
-  <div class="popover-add" id="popover-add">+ Add bill or income on this day</div>
+  <div class="popover-actions">
+    <a class="popover-add" id="popover-add-bill">+ Bill / income on this day</a>
+    <a class="popover-add" id="popover-add-transfer">+ Transfer on this day</a>
+  </div>
 </div>
 
 <script>
@@ -344,7 +403,6 @@ function fmtShort(n) {
   return (n<0?'-':'') + '$' + abs.toLocaleString('en-AU', {maximumFractionDigits: 0});
 }
 
-// Account toggle
 document.querySelectorAll('.account-card').forEach(card => {
   card.addEventListener('click', async (e) => {
     e.preventDefault();
@@ -358,12 +416,10 @@ document.querySelectorAll('.account-card').forEach(card => {
   });
 });
 
-// Visa summary expand
 document.querySelectorAll('.visa-summary').forEach(s => {
   s.addEventListener('click', () => s.classList.toggle('expanded'));
 });
 
-// Calendar
 async function loadForecast() {
   const r = await fetch('{{ url_for("main.api_forecast") }}?days=90');
   FORECAST_DATA = await r.json();
@@ -374,6 +430,12 @@ function dateKey(y, m, d) {
   return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 }
 
+function eventClass(e) {
+  if (e.kind === 'transfer') return 'transfer';
+  if (e.is_income || e.amount > 0) return 'income';
+  return 'bill';
+}
+
 function renderCalendar() {
   document.getElementById('cal-month-label').textContent = `${monthNames[CAL_MONTH]} ${CAL_YEAR}`;
 
@@ -381,7 +443,6 @@ function renderCalendar() {
   const startDay = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(CAL_YEAR, CAL_MONTH+1, 0).getDate();
 
-  // Group instances by date
   const byDay = {};
   if (FORECAST_DATA && FORECAST_DATA.instances) {
     for (const i of FORECAST_DATA.instances) {
@@ -410,8 +471,7 @@ function renderCalendar() {
         (CAL_YEAR === TODAY.getFullYear() && CAL_MONTH === TODAY.getMonth() && day < TODAY.getDate());
 
       const evHtml = events.slice(0, 2).map(e => {
-        const cls = (e.is_income || e.amount > 0) ? 'income' : 'bill';
-        return `<div class="cal-event ${cls}">${e.name}</div>`;
+        return `<div class="cal-event ${eventClass(e)}">${e.name}</div>`;
       }).join('');
       const more = events.length > 2 ? `<div class="cal-event-more">+${events.length-2} more</div>` : '';
 
@@ -430,11 +490,14 @@ function renderCalendar() {
 
       let evMarker = '';
       if (events.length > 0) {
-        const hasIncome = events.some(e => e.is_income || e.amount > 0);
-        const hasBill = events.some(e => !e.is_income && e.amount < 0);
-        if (hasIncome && hasBill) evMarker = 'has-events has-mixed';
-        else if (hasIncome) evMarker = 'has-events has-income';
-        else evMarker = 'has-events has-bill';
+        const hasIncome = events.some(e => e.kind !== 'transfer' && (e.is_income || e.amount > 0));
+        const hasBill = events.some(e => e.kind !== 'transfer' && !e.is_income && e.amount < 0);
+        const hasTransfer = events.some(e => e.kind === 'transfer');
+        const flags = [];
+        if (hasIncome) flags.push('has-income');
+        if (hasBill) flags.push('has-bill');
+        if (hasTransfer) flags.push('has-transfer');
+        evMarker = 'has-events ' + flags.join(' ');
       }
 
       html += `<div class="cal-cell ${isToday?'today':''} ${cellClass} ${evMarker}" data-day="${day}">
@@ -476,17 +539,22 @@ function showPopover(day, events, cell, evt) {
 
   const list = document.getElementById('popover-list');
   if (events.length === 0) {
-    list.innerHTML = `<div class="popover-empty">No bills or income on this day.</div>`;
+    list.innerHTML = `<div class="popover-empty">No bills, income, or transfers on this day.</div>`;
   } else {
-    const sorted = [...events].sort((a,b) => b.amount - a.amount);
+    const sorted = [...events].sort((a,b) => {
+      const aAmt = a.kind === 'transfer' ? a.amount : Math.abs(a.amount);
+      const bAmt = b.kind === 'transfer' ? b.amount : Math.abs(b.amount);
+      return bAmt - aAmt;
+    });
     list.innerHTML = sorted.map(e => {
-      const cls = (e.is_income || e.amount > 0) ? 'income' : 'bill';
+      const cls = eventClass(e);
+      const showAmount = e.kind === 'transfer' ? `↔ ${fmt(e.amount)}` : `${e.amount > 0 ? '+' : ''}${fmt(e.amount)}`;
       return `<li class="popover-item">
         <div>
           <div class="popover-name">${e.name}</div>
           <div class="popover-cat">${e.category} · ${e.recurring}</div>
         </div>
-        <div class="popover-amount ${cls}">${e.amount > 0 ? '+' : ''}${fmt(e.amount)}</div>
+        <div class="popover-amount ${cls}">${showAmount}</div>
       </li>`;
     }).join('');
   }
@@ -511,10 +579,15 @@ document.addEventListener('click', (e) => {
     document.getElementById('popover').classList.remove('open');
   }
 });
-document.getElementById('popover-add').addEventListener('click', () => {
+document.getElementById('popover-add-bill').addEventListener('click', () => {
   const day = parseInt(document.getElementById('popover').dataset.day);
   const dateStr = dateKey(CAL_YEAR, CAL_MONTH, day);
   window.location.href = '{{ url_for("main.new_bill") }}?date=' + dateStr;
+});
+document.getElementById('popover-add-transfer').addEventListener('click', () => {
+  const day = parseInt(document.getElementById('popover').dataset.day);
+  const dateStr = dateKey(CAL_YEAR, CAL_MONTH, day);
+  window.location.href = '{{ url_for("main.new_transfer") }}?date=' + dateStr;
 });
 
 document.getElementById('prev-month').addEventListener('click', (e) => {

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>{% if transfer %}Edit transfer{% else %}Add scheduled transfer{% endif %}</h1>
+      <p>Money moving between two of your own accounts (e.g. salary → mortgage redraw, savings sweeps). The forecast nets these out based on which accounts you've selected.</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('main.dashboard') }}">← Back to dashboard</a>
+  </div>
+
+  <form class="form-card" method="POST">
+    <h2>{% if transfer %}{{ transfer.name }}{% else %}New transfer{% endif %}</h2>
+    <p class="form-sub">Examples: PPOR mortgage payment, weekly savings sweep, paying down the Gem Visa.</p>
+
+    <div class="form-row">
+      <label>Description</label>
+      <input type="text" name="name" value="{{ transfer.name if transfer else '' }}" placeholder="e.g. PPOR mortgage payment" required>
+    </div>
+
+    <div class="form-row">
+      <label>Amount ($)</label>
+      <input type="number" name="amount" step="0.01" min="0"
+        value="{{ transfer.amount if transfer else '' }}"
+        placeholder="1500.00" required>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>From account</label>
+        <select name="from_account_id" required>
+          {% for a in accounts %}
+          <option value="{{ a.id }}" {% if transfer and transfer.from_account_id == a.id %}selected{% endif %}>
+            {{ a.bank }} — {{ a.name }} ({{ a.type }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label>To account</label>
+        <select name="to_account_id" required>
+          {% for a in accounts %}
+          <option value="{{ a.id }}" {% if transfer and transfer.to_account_id == a.id %}selected{% endif %}>
+            {{ a.bank }} — {{ a.name }} ({{ a.type }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>{% if transfer %}Next date{% else %}First date{% endif %}</label>
+        <input type="date" name="next_date" min="{{ today_iso }}"
+          value="{{ transfer.next_date if transfer else (prefilled_date or today_iso) }}" required>
+      </div>
+      <div class="form-row">
+        <label>Repeats</label>
+        <select name="recurring">
+          {% for r, label in [('once','One-off'),('weekly','Weekly'),('fortnightly','Fortnightly'),('monthly','Monthly'),('quarterly','Quarterly'),('yearly','Yearly')] %}
+          <option value="{{ r }}" {% if transfer and transfer.recurring == r %}selected{% elif not transfer and r == 'fortnightly' %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Stop after date <span class="form-hint">(optional)</span></label>
+        <input type="date" name="end_date"
+          value="{{ transfer.end_date if transfer and transfer.end_date else '' }}">
+      </div>
+      <div class="form-row">
+        <label>Or stop after this many occurrences <span class="form-hint">(optional)</span></label>
+        <input type="number" name="occurrences_remaining" min="1" step="1"
+          value="{{ transfer.occurrences_remaining if transfer and transfer.occurrences_remaining else '' }}">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label>Category <span class="form-hint">(optional)</span></label>
+      <input type="text" name="category" list="category-list"
+        value="{{ transfer.category if transfer and transfer.category else '' }}"
+        placeholder="e.g. Mortgage · PPOR">
+      <datalist id="category-list">
+        {% for c in categories %}<option value="{{ c }}">{% endfor %}
+      </datalist>
+    </div>
+
+    <div class="form-row">
+      <label>Notes <span class="form-hint">(optional)</span></label>
+      <textarea name="notes" rows="2" placeholder="Anything to remember">{{ transfer.notes if transfer and transfer.notes else '' }}</textarea>
+    </div>
+
+    <div class="form-actions">
+      <div>
+        {% if transfer %}
+        <form method="POST" action="{{ url_for('main.delete_transfer', tid=transfer.id) }}" style="display:inline;" onsubmit="return confirm('Delete this scheduled transfer? This cannot be undone.');">
+          <button type="submit" class="btn danger">Delete</button>
+        </form>
+        {% endif %}
+      </div>
+      <div class="form-actions-right">
+        <a class="btn ghost" href="{{ url_for('main.dashboard') }}">Cancel</a>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}

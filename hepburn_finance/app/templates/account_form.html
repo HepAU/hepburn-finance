@@ -11,7 +11,7 @@
 
   <form class="form-card" method="POST">
     <h2>{% if account %}{{ account.name }}{% else %}New account{% endif %}</h2>
-    <p class="form-sub">Manually enter the current balance. Once you upload CSVs, we'll update it automatically.</p>
+    <p class="form-sub">Manually enter the current values. Once you upload CSVs, transactions update automatically.</p>
 
     <div class="form-grid-2">
       <div class="form-row">
@@ -35,11 +35,11 @@
 
     <div class="form-grid-2">
       <div class="form-row">
-        <label>Account number (optional)</label>
+        <label>Account number <span class="form-hint">(optional)</span></label>
         <input type="text" name="account_number" value="{{ account.account_number if account else '' }}" placeholder="e.g. 302-985 12345678">
       </div>
       <div class="form-row">
-        <label>Nickname (optional)</label>
+        <label>Nickname <span class="form-hint">(optional)</span></label>
         <input type="text" name="nickname" value="{{ account.nickname if account else '' }}" placeholder="e.g. Emergency fund">
       </div>
     </div>
@@ -50,29 +50,35 @@
         <input type="number" name="balance" step="0.01" value="{{ account.balance if account else '' }}" placeholder="0.00" required>
       </div>
       <div class="form-row">
-        <label>Available (optional)</label>
+        <label>Available <span class="form-hint">(what you can actually spend)</span></label>
         <input type="number" name="available" step="0.01" value="{{ account.available if account and account.available is not none else '' }}" placeholder="For credit/transaction">
       </div>
     </div>
 
     <div class="form-grid-2">
       <div class="form-row">
-        <label>Credit limit (cards only)</label>
+        <label>Credit limit <span class="form-hint">(cards only)</span></label>
         <input type="number" name="credit_limit" step="0.01" value="{{ account.credit_limit if account and account.credit_limit is not none else '' }}" placeholder="e.g. 15000">
       </div>
       <div class="form-row">
-        <label>Interest rate % (loans/cards)</label>
-        <input type="number" name="interest_rate" step="0.01" value="{{ account.interest_rate if account and account.interest_rate is not none else '' }}" placeholder="e.g. 6.0">
+        <label>Redraw available <span class="form-hint">(loans — extra you've paid in)</span></label>
+        <input type="number" name="available_redraw" step="0.01" value="{{ account.available_redraw if account and account.available_redraw is not none else '' }}" placeholder="e.g. 4500">
       </div>
     </div>
 
-    <div class="form-row checkbox-row">
-      <input type="checkbox" name="is_deductible" id="is_deductible" {% if account and account.is_deductible %}checked{% endif %}>
-      <label for="is_deductible">Tax-deductible interest (investment loans)</label>
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Interest rate % <span class="form-hint">(loans/cards)</span></label>
+        <input type="number" name="interest_rate" step="0.01" value="{{ account.interest_rate if account and account.interest_rate is not none else '' }}" placeholder="e.g. 6.0">
+      </div>
+      <div class="form-row checkbox-row" style="align-self: end; padding-bottom: 12px;">
+        <input type="checkbox" name="is_deductible" id="is_deductible" {% if account and account.is_deductible %}checked{% endif %}>
+        <label for="is_deductible">Tax-deductible interest (investment loans)</label>
+      </div>
     </div>
 
     <div class="form-row">
-      <label>Notes (optional)</label>
+      <label>Notes <span class="form-hint">(optional)</span></label>
       <textarea name="notes" rows="2" placeholder="Anything to remember">{{ account.notes if account and account.notes else '' }}</textarea>
     </div>
 

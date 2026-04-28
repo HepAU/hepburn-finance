@@ -11,7 +11,7 @@
 
   <form class="form-card" method="POST">
     <h2>{% if bill %}{{ bill.name }}{% else %}New bill or income{% endif %}</h2>
-    <p class="form-sub">Recurring or one-off. Editable later.</p>
+    <p class="form-sub">Recurring or one-off. End-date or occurrence cap optional. Editable later.</p>
 
     <div class="form-row">
       <label>Description</label>
@@ -21,7 +21,7 @@
     <div class="form-grid-2">
       <div class="form-row">
         <label>Amount ($)</label>
-        <input type="number" name="amount" step="0.01"
+        <input type="number" name="amount" step="0.01" min="0"
           value="{{ bill.amount|abs if bill else '' }}"
           placeholder="247.50" required>
       </div>
@@ -36,9 +36,9 @@
 
     <div class="form-grid-2">
       <div class="form-row">
-        <label>Date</label>
-        <input type="date" name="next_date"
-          value="{{ bill.next_date if bill else (prefilled_date or '') }}" required>
+        <label>{% if bill %}Next date{% else %}First date{% endif %}</label>
+        <input type="date" name="next_date" min="{{ today_iso }}"
+          value="{{ bill.next_date if bill else (prefilled_date or today_iso) }}" required>
       </div>
       <div class="form-row">
         <label>Repeats</label>
@@ -47,6 +47,21 @@
           <option value="{{ r }}" {% if bill and bill.recurring == r %}selected{% elif not bill and r == 'monthly' %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
+      </div>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Stop after date <span class="form-hint">(optional)</span></label>
+        <input type="date" name="end_date"
+          value="{{ bill.end_date if bill and bill.end_date else '' }}"
+          placeholder="">
+      </div>
+      <div class="form-row">
+        <label>Or stop after this many occurrences <span class="form-hint">(e.g. Afterpay = 4)</span></label>
+        <input type="number" name="occurrences_remaining" min="1" step="1"
+          value="{{ bill.occurrences_remaining if bill and bill.occurrences_remaining else '' }}"
+          placeholder="">
       </div>
     </div>
 
@@ -62,8 +77,13 @@
     </div>
 
     <div class="form-row">
-      <label>Category (optional)</label>
-      <input type="text" name="category" value="{{ bill.category if bill and bill.category else '' }}" placeholder="e.g. Utilities · Electricity">
+      <label>Category <span class="form-hint">(autocomplete from existing — type to filter, or type something new)</span></label>
+      <input type="text" name="category" list="category-list"
+        value="{{ bill.category if bill and bill.category else '' }}"
+        placeholder="e.g. Utilities · Electricity">
+      <datalist id="category-list">
+        {% for c in categories %}<option value="{{ c }}">{% endfor %}
+      </datalist>
     </div>
 
     <div class="form-actions">

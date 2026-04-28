@@ -313,6 +313,20 @@ a:hover { text-decoration: underline; }
 .acc-balance.neutral { color: var(--text-2); }
 .acc-balance.warn { color: var(--amber); }
 .acc-balance.danger { color: var(--red); }
+.acc-balance-secondary {
+  font-size: 11px; color: var(--text-3);
+  margin-top: 2px;
+  font-family: 'Geist Mono', monospace;
+  font-feature-settings: 'tnum';
+}
+.acc-balance-secondary .acc-balance-label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 9px;
+  color: var(--text-3);
+  opacity: 0.7;
+  margin-right: 3px;
+}
 .acc-meta {
   font-size: 10px; color: var(--text-3); margin-top: 3px;
   font-family: 'Geist Mono', monospace;
@@ -446,8 +460,18 @@ a:hover { text-decoration: underline; }
 .cal-cell.danger-bal { background: rgba(248,113,113,0.06); }
 .cal-cell.has-events.has-bill { box-shadow: inset 3px 0 0 var(--red); }
 .cal-cell.has-events.has-income { box-shadow: inset 3px 0 0 var(--green); }
-.cal-cell.has-events.has-mixed {
+.cal-cell.has-events.has-transfer { box-shadow: inset 3px 0 0 var(--blue); }
+.cal-cell.has-events.has-bill.has-income {
   box-shadow: inset 3px 0 0 var(--green), inset 0 -3px 0 var(--red);
+}
+.cal-cell.has-events.has-bill.has-transfer {
+  box-shadow: inset 3px 0 0 var(--blue), inset 0 -3px 0 var(--red);
+}
+.cal-cell.has-events.has-income.has-transfer {
+  box-shadow: inset 3px 0 0 var(--green), inset 0 -3px 0 var(--blue);
+}
+.cal-cell.has-events.has-bill.has-income.has-transfer {
+  box-shadow: inset 3px 0 0 var(--green), inset -3px 0 0 var(--blue), inset 0 -3px 0 var(--red);
 }
 .cal-day-num {
   font-size: 12px; font-weight: 500; color: var(--text-2);
@@ -471,6 +495,8 @@ a:hover { text-decoration: underline; }
 }
 .cal-event.bill { background: var(--red-bg); color: var(--red); }
 .cal-event.income { background: var(--green-bg); color: var(--green); }
+.cal-event.transfer { background: var(--blue-bg); color: var(--blue); }
+.dot.transfer { background: var(--blue); }
 .cal-event-more {
   font-size: 10px; color: var(--text-3);
   margin-top: 3px; padding-left: 6px;
@@ -517,18 +543,23 @@ a:hover { text-decoration: underline; }
 }
 .popover-amount.bill { color: var(--red); }
 .popover-amount.income { color: var(--green); }
+.popover-amount.transfer { color: var(--blue); }
 .popover-empty {
   font-size: 12px; color: var(--text-3);
   text-align: center; padding: 12px 0;
 }
-.popover-add {
-  display: block; text-align: center;
-  margin-top: 8px;
-  font-size: 12px; color: var(--accent);
-  padding: 6px; border-radius: 6px;
-  cursor: pointer; transition: background 0.15s;
+.popover-actions {
+  display: flex; gap: 6px; margin-top: 8px;
 }
-.popover-add:hover { background: rgba(245,181,68,0.1); }
+.popover-add {
+  flex: 1;
+  display: block; text-align: center;
+  font-size: 11.5px; color: var(--accent);
+  padding: 8px 6px; border-radius: 6px;
+  cursor: pointer; transition: background 0.15s;
+  text-decoration: none;
+}
+.popover-add:hover { background: rgba(245,181,68,0.1); text-decoration: none; }
 
 /* Right column panels */
 .panel {
@@ -562,8 +593,10 @@ a:hover { text-decoration: underline; }
   flex-shrink: 0;
 }
 .bill-day.urgent { background: var(--red-bg); }
+.bill-day.transfer { background: var(--blue-bg); }
 .bill-day .day-num { font-size: 13px; font-weight: 600; line-height: 1; }
 .bill-day.urgent .day-num { color: var(--red); }
+.bill-day.transfer .day-num { color: var(--blue); }
 .bill-day .day-mo {
   font-size: 9px; color: var(--text-3);
   text-transform: uppercase; letter-spacing: 0.05em;
@@ -580,6 +613,15 @@ a:hover { text-decoration: underline; }
 }
 .bill-amount.negative { color: var(--text); }
 .bill-amount.positive { color: var(--green); }
+.bill-amount.transfer { color: var(--blue); }
+
+/* Form hints */
+.form-hint {
+  font-size: 10px; color: var(--text-3);
+  text-transform: none; letter-spacing: 0;
+  font-weight: 400; margin-left: 4px;
+  font-style: italic;
+}
 
 .tx-item {
   display: grid; grid-template-columns: 1fr auto;

@@ -10,10 +10,23 @@
   </div>
 
   <div class="form-card">
-    <h2>{{ new_count }} new transactions imported</h2>
+    <h2>{{ new_count }} new transaction{{ 's' if new_count != 1 else '' }} imported</h2>
     <p class="form-sub">
-      Total in CSV: {{ total }} · Duplicates skipped: {{ total - new_count }} · Parser used: {{ parser }}
+      {{ total }} total in CSV ·
+      {% if duplicates > 0 %}
+      <strong>{{ duplicates }} duplicate{{ 's' if duplicates != 1 else '' }} skipped</strong> (already in the database) ·
+      {% endif %}
+      Parser used: {{ parser }}
     </p>
+
+    {% if duplicates > 0 %}
+    <p class="form-sub" style="margin-top: -16px;">
+      <span style="color: var(--text-2);">
+        Duplicates are detected by fingerprint (account + date + amount + description).
+        It's safe to re-upload overlapping CSVs — only new transactions get added.
+      </span>
+    </p>
+    {% endif %}
 
     <div class="form-actions">
       <div></div>
