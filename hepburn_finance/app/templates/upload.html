@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>Upload bank export</h1>
+      <p>Bendigo CSV format detected automatically. Other Aussie banks fall back to a generic parser.</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('main.dashboard') }}">← Back to dashboard</a>
+  </div>
+
+  <form class="form-card" method="POST" enctype="multipart/form-data">
+    <h2>Upload CSV</h2>
+    <p class="form-sub">Pick the account this CSV belongs to, then drop your file. Duplicate transactions are skipped automatically.</p>
+
+    <div class="form-row">
+      <label>Account</label>
+      <select name="account_id" required>
+        {% for a in accounts %}
+        <option value="{{ a.id }}">{{ a.bank }} — {{ a.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-row">
+      <label>CSV file</label>
+      <input type="file" name="file" accept=".csv,.tsv,.txt" required>
+    </div>
+
+    <div class="form-actions">
+      <div></div>
+      <div class="form-actions-right">
+        <a class="btn ghost" href="{{ url_for('main.dashboard') }}">Cancel</a>
+        <button type="submit" class="btn primary">Upload & categorise</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}

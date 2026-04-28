@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>{% if account %}Edit account{% else %}Add account{% endif %}</h1>
+      <p>Bendigo, Bankwest, CommBank, Macquarie — anything you want to track.</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('main.dashboard') }}">← Back to dashboard</a>
+  </div>
+
+  <form class="form-card" method="POST">
+    <h2>{% if account %}{{ account.name }}{% else %}New account{% endif %}</h2>
+    <p class="form-sub">Manually enter the current balance. Once you upload CSVs, we'll update it automatically.</p>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Bank</label>
+        <input type="text" name="bank" value="{{ account.bank if account else '' }}" placeholder="e.g. Bendigo, Bankwest" required>
+      </div>
+      <div class="form-row">
+        <label>Type</label>
+        <select name="type" required>
+          {% for t, label in [('transaction','Transaction (everyday)'),('savings','Savings'),('credit','Credit card'),('ppor','Home loan (PPOR)'),('loan','Investment loan')] %}
+          <option value="{{ t }}" {% if account and account.type == t %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label>Name</label>
+      <input type="text" name="name" value="{{ account.name if account else '' }}" placeholder="e.g. Bankwest Easy Saver" required>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Account number (optional)</label>
+        <input type="text" name="account_number" value="{{ account.account_number if account else '' }}" placeholder="e.g. 302-985 12345678">
+      </div>
+      <div class="form-row">
+        <label>Nickname (optional)</label>
+        <input type="text" name="nickname" value="{{ account.nickname if account else '' }}" placeholder="e.g. Emergency fund">
+      </div>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Current balance</label>
+        <input type="number" name="balance" step="0.01" value="{{ account.balance if account else '' }}" placeholder="0.00" required>
+      </div>
+      <div class="form-row">
+        <label>Available (optional)</label>
+        <input type="number" name="available" step="0.01" value="{{ account.available if account and account.available is not none else '' }}" placeholder="For credit/transaction">
+      </div>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Credit limit (cards only)</label>
+        <input type="number" name="credit_limit" step="0.01" value="{{ account.credit_limit if account and account.credit_limit is not none else '' }}" placeholder="e.g. 15000">
+      </div>
+      <div class="form-row">
+        <label>Interest rate % (loans/cards)</label>
+        <input type="number" name="interest_rate" step="0.01" value="{{ account.interest_rate if account and account.interest_rate is not none else '' }}" placeholder="e.g. 6.0">
+      </div>
+    </div>
+
+    <div class="form-row checkbox-row">
+      <input type="checkbox" name="is_deductible" id="is_deductible" {% if account and account.is_deductible %}checked{% endif %}>
+      <label for="is_deductible">Tax-deductible interest (investment loans)</label>
+    </div>
+
+    <div class="form-row">
+      <label>Notes (optional)</label>
+      <textarea name="notes" rows="2" placeholder="Anything to remember">{{ account.notes if account and account.notes else '' }}</textarea>
+    </div>
+
+    <div class="form-actions">
+      <div>
+        {% if account %}
+        <form method="POST" action="{{ url_for('main.delete_account', aid=account.id) }}" style="display:inline;" onsubmit="return confirm('Archive this account? Transactions will be kept.');">
+          <button type="submit" class="btn danger">Archive</button>
+        </form>
+        {% endif %}
+      </div>
+      <div class="form-actions-right">
+        <a class="btn ghost" href="{{ url_for('main.dashboard') }}">Cancel</a>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}

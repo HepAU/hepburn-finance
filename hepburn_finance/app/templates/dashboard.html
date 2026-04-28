@@ -1,0 +1,532 @@
+{% extends "base.html" %}
+
+{% macro fmt_money(n, dp=2) %}
+{%- if n is none -%}—{%- else -%}
+{%- set abs_n = n if n >= 0 else -n -%}
+{{- ('-' if n < 0 else '') }}${{ '{:,.{}f}'.format(abs_n, dp) }}
+{%- endif -%}
+{% endmacro %}
+
+{% macro fmt_short(n) %}
+{%- if n is none -%}—{%- else -%}
+{%- set abs_n = n if n >= 0 else -n -%}
+{%- if abs_n >= 100000 -%}
+{{ ('-' if n < 0 else '') }}${{ '{:,.0f}'.format(abs_n / 1000) }}k
+{%- elif abs_n >= 10000 -%}
+{{ ('-' if n < 0 else '') }}${{ '{:.1f}'.format(abs_n / 1000) }}k
+{%- else -%}
+{{ ('-' if n < 0 else '') }}${{ '{:,.0f}'.format(abs_n) }}
+{%- endif -%}
+{%- endif -%}
+{% endmacro %}
+
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>Good day, the <em>{{ cfg.family_name }}s</em></h1>
+      <p>{{ today_str }} — focusing on the next 30 days</p>
+    </div>
+    <div class="top-actions">
+      <a class="btn" href="{{ url_for('main.upload') }}">Upload CSV</a>
+      <a class="btn primary" href="{{ url_for('main.new_bill') }}">+ Add bill</a>
+    </div>
+  </div>
+
+  <!-- Stress meter -->
+  <div class="stress-card tier-{{ stress.tier }}">
+    <div class="stress-grid">
+      <div class="stress-status">
+        <div class="stress-icon">
+          {% if stress.tier == 'green' %}✓{% elif stress.tier == 'amber' %}⚠{% else %}✕{% endif %}
+        </div>
+        <div>
+          <div class="stress-label">Cash Flow · Next 30 days</div>
+          <div class="stress-tier">
+            {% if stress.tier == 'green' %}Safe 30 days
+            {% elif stress.tier == 'amber' %}Tight but workable
+            {% else %}Likely shortfall
+            {% endif %}
+          </div>
+          <div class="stress-msg">{{ stress.message }}</div>
+        </div>
+      </div>
+      <div class="stress-stat">
+        <div class="label">Days Until Zero</div>
+        <div class="value{% if stress.dtz is none %} good{% elif stress.dtz < 7 %} danger{% elif stress.dtz < 14 %} warn{% endif %}">
+          {% if stress.dtz is none %}30+{% else %}{{ stress.dtz }}d{% endif %}
+        </div>
+        <div class="sub">If no income lands sooner</div>
+      </div>
+      <div class="stress-stat">
+        <div class="label">Bills Coverage</div>
+        <div class="value{% if stress.coverage >= 100 %} good{% elif stress.coverage >= 80 %} warn{% else %} danger{% endif %}">
+          {{ stress.coverage }}%
+        </div>
+        <div class="sub">Cash + 30d income / 30d bills</div>
+        <div class="stress-bar"><div class="stress-bar-fill" style="width: {{ [stress.coverage, 100]|min }}%;"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Smart suggestions + Debt attack -->
+  <div class="assist-row">
+    <div class="assist-card{% if suggestions and suggestions[0].priority in ['urgent','attention'] %} attention{% endif %}">
+      <div class="assist-head">
+        <div class="ai-mark">A</div>
+        <h2>Smart suggestions</h2>
+        <div class="meta">Updated just now</div>
+      </div>
+      {% for s in suggestions %}
+      <div class="suggestion-item">
+        <div class="suggestion-icon {{ s.priority }}">{{ s.icon }}</div>
+        <div class="suggestion-text">
+          {{ s.text|safe }}
+          <span class="reasoning">{{ s.reasoning }}</span>
+        </div>
+        <button class="suggestion-action">{{ s.action }}</button>
+      </div>
+      {% else %}
+      <div style="padding: 12px 0; color: var(--text-3); font-size: 13px;">Nothing pressing right now.</div>
+      {% endfor %}
+    </div>
+
+    <div class="assist-card">
+      <div class="assist-head">
+        <div class="ai-mark">A</div>
+        <h2>Debt attack order</h2>
+        <div class="meta">Situation-aware</div>
+      </div>
+      {% for d in debt %}
+      <div class="debt-rank priority-{{ d.priority }}">
+        <div class="debt-rank-num">{{ d.rank }}</div>
+        <div>
+          <div class="debt-name">{{ d.name }}</div>
+          <div class="debt-detail">{{ d.detail|safe }}</div>
+        </div>
+        <div class="debt-amount">{{ fmt_money(d.amount, 0) }}</div>
+        <div class="debt-rate {{ d.rate_class }}">{{ d.rate }}</div>
+      </div>
+      {% endfor %}
+      <div class="debt-footer">
+        <strong style="color:var(--blue);">*</strong> Investment loan interest is tax-deductible — extra repayments here earn less than paying down non-deductible debt first.
+      </div>
+    </div>
+  </div>
+
+  <!-- Accounts grouped by bank -->
+  {% for bank, accs in accounts_by_bank.items() %}
+  <div class="account-group">
+    <div class="group-head">
+      <h3>{{ bank }}</h3>
+      <span class="meta">Tap to include in calendar forecast</span>
+    </div>
+    <div class="accounts-grid">
+      {% for a in accs %}
+      <div class="account-card{% if a.id in selected_ids %} selected{% endif %}" data-id="{{ a.id }}">
+        <div class="acc-header-row">
+          <span class="acc-type-tag {{ a.type }}">
+            {% if a.type == 'ppor' %}PPOR{% else %}{{ a.type }}{% endif %}
+          </span>
+        </div>
+        <div class="acc-name">{{ a.name }}</div>
+        <div class="acc-balance
+          {%- if a.type in ['loan','ppor'] %} neutral
+          {%- elif a.balance == 0 %} dim
+          {%- elif a.balance < 0 %} danger
+          {%- elif a.type == 'transaction' and a.balance < 200 %} warn
+          {%- endif %}">{{ fmt_money(a.balance) }}</div>
+        <div class="acc-meta">
+          {% if a.account_number %}{{ a.account_number }}{% endif %}
+          {% if a.type == 'transaction' and a.available is not none %} · ${{ '%.2f'|format(a.available) }} avail{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      <a class="add-account-card" href="{{ url_for('main.new_account') }}">
+        <div>+ Add account</div>
+      </a>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- Calendar + right column -->
+  <div class="grid-2">
+    <div class="cal-card">
+      <div class="cal-toolbar">
+        <div class="cal-month-nav">
+          <button class="icon-btn" id="prev-month">‹</button>
+          <div class="cal-month" id="cal-month-label"></div>
+          <button class="icon-btn" id="next-month">›</button>
+        </div>
+        <div>
+          <span class="legend-pill"><span class="dot bill"></span>Bill</span>
+          <span class="legend-pill"><span class="dot income"></span>Income</span>
+          <span class="legend-pill" style="margin-left:12px;color:var(--text-2);">Click a day to view or add</span>
+        </div>
+      </div>
+      <div class="cal-grid" id="calendar"></div>
+    </div>
+
+    <div>
+      <div class="quick-actions">
+        <a class="qa-tile" href="{{ url_for('main.upload') }}">
+          <div class="qa-tile-title">Upload</div>
+          <div class="qa-tile-sub">CSV / bill PDF</div>
+        </a>
+        <a class="qa-tile" href="{{ url_for('main.new_bill') }}">
+          <div class="qa-tile-title">+ Add bill</div>
+          <div class="qa-tile-sub">One-off or recurring</div>
+        </a>
+      </div>
+
+      <div class="panel">
+        <div class="section-header" style="margin-bottom: 10px;">
+          <h2>Upcoming bills</h2>
+          <span class="meta">Next 14 days</span>
+        </div>
+        <ul class="bill-list">
+          {% for b in bills_14d[:8] %}
+          {% set days_away = (b.date - today_obj).days %}
+          <li class="bill-item">
+            <div class="bill-day{% if days_away <= 3 %} urgent{% endif %}">
+              <div>
+                <div class="day-num">{{ b.date.day }}</div>
+                <div class="day-mo">{{ b.date.strftime('%b') }}</div>
+              </div>
+            </div>
+            <div class="bill-info">
+              <div class="bill-name">{{ b.name }}</div>
+              <div class="bill-cat">{{ b.category }} · {{ b.recurring }}</div>
+            </div>
+            <div class="bill-amount {% if b.amount < 0 %}negative{% else %}positive{% endif %}">
+              {{ fmt_money(b.amount) }}
+            </div>
+            <div></div>
+          </li>
+          {% else %}
+          <li style="padding: 8px 0; color: var(--text-3); font-size: 13px;">No bills in the next 14 days.</li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div class="panel">
+        <div class="section-header" style="margin-bottom: 10px;">
+          <h2>Recent activity</h2>
+          <span class="meta">{{ recent_tx|length }} most recent</span>
+        </div>
+        <ul class="tx-list">
+          {% for t in recent_tx %}
+          <li class="tx-item">
+            <div class="tx-info">
+              <div class="tx-desc">{{ t.description }}</div>
+              <div class="tx-meta">
+                <span>{{ t.date }}</span>
+                {% if t.category %}<span class="tx-cat-tag">{{ t.category }}</span>{% endif %}
+              </div>
+            </div>
+            <div class="tx-amount {% if t.amount > 0 %}positive{% endif %}">
+              {{ fmt_money(t.amount) }}
+            </div>
+          </li>
+          {% else %}
+          <li style="padding: 12px 0; color: var(--text-3); font-size: 13px; text-align: center;">No transactions yet — <a href="{{ url_for('main.upload') }}">upload a CSV</a> to get started.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visa expandable summary -->
+  {% set credit_accs = [] %}
+  {% for bank, accs in accounts_by_bank.items() %}
+    {% for a in accs %}
+      {% if a.type == 'credit' %}{% set _ = credit_accs.append(a) %}{% endif %}
+    {% endfor %}
+  {% endfor %}
+  {% for ca in credit_accs %}
+  <div class="visa-summary" id="visa-summary-{{ ca.id }}">
+    <div class="visa-summary-row">
+      <div class="visa-mark">{{ ca.name[:2]|upper }}</div>
+      <div class="visa-summary-name">
+        {{ ca.name }}
+        <span class="sub">{{ ca.account_number }}{% if plans %} · {{ plans|length }} active interest-free plans{% endif %}</span>
+      </div>
+      <div class="visa-summary-stat">
+        <div class="label">Balance</div>
+        <div class="value">{{ fmt_money(ca.balance) }}</div>
+      </div>
+      {% if ca.available is not none %}
+      <div class="visa-summary-stat">
+        <div class="label">Available</div>
+        <div class="value{% if ca.available < 500 %} warn{% endif %}">${{ '%.2f'|format(ca.available) }}</div>
+      </div>
+      {% endif %}
+      {% if ca.credit_limit %}
+      <div class="visa-summary-stat">
+        <div class="label">Limit</div>
+        <div class="value">${{ '{:,.0f}'.format(ca.credit_limit) }}</div>
+      </div>
+      {% endif %}
+      <div class="visa-chevron">▼</div>
+    </div>
+    <div class="visa-expand">
+      <div class="visa-expand-inner">
+        {% if ca.credit_limit %}
+        {% set util = (ca.balance|abs / ca.credit_limit * 100)|round(0)|int %}
+        <div class="visa-utilisation">
+          <div class="visa-utilisation-fill" style="width: {{ util }}%;"></div>
+        </div>
+        <div class="visa-utilisation-label">
+          <span>{{ util }}% of ${{ '{:,.0f}'.format(ca.credit_limit) }} limit used</span>
+          {% if ca.interest_rate %}<span>{{ ca.interest_rate }}% purchase rate</span>{% endif %}
+        </div>
+        {% endif %}
+        {% if plans %}
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text-2);">Active interest-free plans</div>
+        <ul class="plan-list">
+          {% for p in plans %}
+          <li class="plan-item">
+            <div>
+              <div class="plan-name">{{ p.name }}</div>
+              <div class="plan-detail">{{ p.detail or '' }}</div>
+            </div>
+            <div>
+              <div class="plan-amount">${{ '%.2f'|format(p.current_balance) }}</div>
+              <div class="plan-expiry">Exp {{ p.expiry_date }}</div>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <p class="disclaimer">
+    This dashboard provides general information based on your data. It is not personal financial advice.
+    For investment, tax, or hardship decisions, consult a licensed advisor.
+  </p>
+</div>
+
+<!-- Day popover -->
+<div class="popover" id="popover">
+  <div class="popover-head">
+    <div class="popover-date" id="popover-date"></div>
+    <div class="popover-balance" id="popover-balance">
+      <span class="label">Forecast</span>
+      <span id="popover-balance-value">—</span>
+    </div>
+  </div>
+  <ul class="popover-list" id="popover-list"></ul>
+  <div class="popover-add" id="popover-add">+ Add bill or income on this day</div>
+</div>
+
+<script>
+const TODAY = new Date('{{ today }}T00:00:00');
+let CAL_MONTH = TODAY.getMonth();
+let CAL_YEAR = TODAY.getFullYear();
+let FORECAST_DATA = null;
+
+const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function fmt(n, dp=2) {
+  if (n === null || n === undefined) return '—';
+  const sign = n < 0 ? '-' : '';
+  return sign + '$' + Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+}
+function fmtShort(n) {
+  if (n === null || n === undefined) return '—';
+  const abs = Math.abs(n);
+  if (abs >= 100000) return (n<0?'-':'') + '$' + (abs/1000).toFixed(0) + 'k';
+  if (abs >= 10000) return (n<0?'-':'') + '$' + (abs/1000).toFixed(1) + 'k';
+  return (n<0?'-':'') + '$' + abs.toLocaleString('en-AU', {maximumFractionDigits: 0});
+}
+
+// Account toggle
+document.querySelectorAll('.account-card').forEach(card => {
+  card.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const aid = parseInt(card.dataset.id);
+    if (isNaN(aid)) return;
+    const r = await fetch('{{ url_for("main.toggle_account") }}', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({account_id: aid})
+    });
+    if (r.ok) location.reload();
+  });
+});
+
+// Visa summary expand
+document.querySelectorAll('.visa-summary').forEach(s => {
+  s.addEventListener('click', () => s.classList.toggle('expanded'));
+});
+
+// Calendar
+async function loadForecast() {
+  const r = await fetch('{{ url_for("main.api_forecast") }}?days=90');
+  FORECAST_DATA = await r.json();
+  renderCalendar();
+}
+
+function dateKey(y, m, d) {
+  return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function renderCalendar() {
+  document.getElementById('cal-month-label').textContent = `${monthNames[CAL_MONTH]} ${CAL_YEAR}`;
+
+  const first = new Date(CAL_YEAR, CAL_MONTH, 1);
+  const startDay = (first.getDay() + 6) % 7;
+  const daysInMonth = new Date(CAL_YEAR, CAL_MONTH+1, 0).getDate();
+
+  // Group instances by date
+  const byDay = {};
+  if (FORECAST_DATA && FORECAST_DATA.instances) {
+    for (const i of FORECAST_DATA.instances) {
+      const dt = new Date(i.date + 'T00:00:00');
+      if (dt.getMonth() === CAL_MONTH && dt.getFullYear() === CAL_YEAR) {
+        const d = dt.getDate();
+        if (!byDay[d]) byDay[d] = [];
+        byDay[d].push(i);
+      }
+    }
+  }
+
+  let html = '<div class="cal-head"><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div></div>';
+  let day = 1 - startDay;
+  for (let row = 0; row < 6 && day <= daysInMonth; row++) {
+    html += '<div class="cal-row">';
+    for (let col = 0; col < 7; col++, day++) {
+      if (day < 1 || day > daysInMonth) {
+        html += '<div class="cal-cell muted"></div>';
+        continue;
+      }
+      const events = byDay[day] || [];
+      const isToday = day === TODAY.getDate() && CAL_MONTH === TODAY.getMonth() && CAL_YEAR === TODAY.getFullYear();
+      const isPast = (CAL_YEAR < TODAY.getFullYear()) ||
+        (CAL_YEAR === TODAY.getFullYear() && CAL_MONTH < TODAY.getMonth()) ||
+        (CAL_YEAR === TODAY.getFullYear() && CAL_MONTH === TODAY.getMonth() && day < TODAY.getDate());
+
+      const evHtml = events.slice(0, 2).map(e => {
+        const cls = (e.is_income || e.amount > 0) ? 'income' : 'bill';
+        return `<div class="cal-event ${cls}">${e.name}</div>`;
+      }).join('');
+      const more = events.length > 2 ? `<div class="cal-event-more">+${events.length-2} more</div>` : '';
+
+      let balHtml = ''; let cellClass = '';
+      if (!isPast && FORECAST_DATA && FORECAST_DATA.balances) {
+        const k = dateKey(CAL_YEAR, CAL_MONTH, day);
+        const bal = FORECAST_DATA.balances[k];
+        if (bal !== undefined) {
+          let balCls = 'positive';
+          if (bal < 0) { balCls = 'danger'; cellClass = 'danger-bal'; }
+          else if (bal < 200) { balCls = 'warn'; cellClass = 'warn-bal'; }
+          else if (bal < 500) balCls = 'warn';
+          balHtml = `<div class="cal-balance ${balCls}">${fmtShort(bal)}</div>`;
+        }
+      }
+
+      let evMarker = '';
+      if (events.length > 0) {
+        const hasIncome = events.some(e => e.is_income || e.amount > 0);
+        const hasBill = events.some(e => !e.is_income && e.amount < 0);
+        if (hasIncome && hasBill) evMarker = 'has-events has-mixed';
+        else if (hasIncome) evMarker = 'has-events has-income';
+        else evMarker = 'has-events has-bill';
+      }
+
+      html += `<div class="cal-cell ${isToday?'today':''} ${cellClass} ${evMarker}" data-day="${day}">
+        <div class="cal-day-num">${day}</div>
+        ${balHtml}${evHtml}${more}
+      </div>`;
+    }
+    html += '</div>';
+  }
+  document.getElementById('calendar').innerHTML = html;
+
+  document.querySelectorAll('#calendar .cal-cell[data-day]').forEach(cell => {
+    cell.addEventListener('click', (e) => {
+      const d = parseInt(cell.dataset.day);
+      const events = byDay[d] || [];
+      showPopover(d, events, cell, e);
+    });
+  });
+}
+
+function showPopover(day, events, cell, evt) {
+  const popover = document.getElementById('popover');
+  const date = new Date(CAL_YEAR, CAL_MONTH, day);
+  document.getElementById('popover-date').textContent = date.toLocaleDateString('en-AU', { weekday:'short', day:'numeric', month:'short' });
+
+  const balValEl = document.getElementById('popover-balance-value');
+  const balLabel = document.getElementById('popover-balance');
+  balLabel.classList.remove('danger','warn');
+
+  if (FORECAST_DATA && FORECAST_DATA.balances) {
+    const k = dateKey(CAL_YEAR, CAL_MONTH, day);
+    const bal = FORECAST_DATA.balances[k];
+    if (bal !== undefined) {
+      balValEl.textContent = fmt(bal, 0);
+      if (bal < 0) balLabel.classList.add('danger');
+      else if (bal < 500) balLabel.classList.add('warn');
+    } else { balValEl.textContent = '—'; }
+  }
+
+  const list = document.getElementById('popover-list');
+  if (events.length === 0) {
+    list.innerHTML = `<div class="popover-empty">No bills or income on this day.</div>`;
+  } else {
+    const sorted = [...events].sort((a,b) => b.amount - a.amount);
+    list.innerHTML = sorted.map(e => {
+      const cls = (e.is_income || e.amount > 0) ? 'income' : 'bill';
+      return `<li class="popover-item">
+        <div>
+          <div class="popover-name">${e.name}</div>
+          <div class="popover-cat">${e.category} · ${e.recurring}</div>
+        </div>
+        <div class="popover-amount ${cls}">${e.amount > 0 ? '+' : ''}${fmt(e.amount)}</div>
+      </li>`;
+    }).join('');
+  }
+
+  const rect = cell.getBoundingClientRect();
+  popover.classList.add('open');
+  const popH = popover.offsetHeight;
+  const popW = popover.offsetWidth;
+  let top = rect.bottom + 8;
+  let left = rect.left + rect.width/2 - popW/2;
+  if (top + popH > window.innerHeight - 16) top = rect.top - popH - 8;
+  if (left < 16) left = 16;
+  if (left + popW > window.innerWidth - 16) left = window.innerWidth - popW - 16;
+  popover.style.top = top + 'px';
+  popover.style.left = left + 'px';
+  popover.dataset.day = day;
+  evt.stopPropagation();
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#popover') && !e.target.closest('.cal-cell[data-day]')) {
+    document.getElementById('popover').classList.remove('open');
+  }
+});
+document.getElementById('popover-add').addEventListener('click', () => {
+  const day = parseInt(document.getElementById('popover').dataset.day);
+  const dateStr = dateKey(CAL_YEAR, CAL_MONTH, day);
+  window.location.href = '{{ url_for("main.new_bill") }}?date=' + dateStr;
+});
+
+document.getElementById('prev-month').addEventListener('click', (e) => {
+  e.stopPropagation();
+  CAL_MONTH--; if (CAL_MONTH < 0) { CAL_MONTH = 11; CAL_YEAR--; }
+  renderCalendar();
+});
+document.getElementById('next-month').addEventListener('click', (e) => {
+  e.stopPropagation();
+  CAL_MONTH++; if (CAL_MONTH > 11) { CAL_MONTH = 0; CAL_YEAR++; }
+  renderCalendar();
+});
+
+loadForecast();
+</script>
+{% endblock %}

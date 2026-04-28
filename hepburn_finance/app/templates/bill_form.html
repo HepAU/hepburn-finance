@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>{% if bill %}Edit bill{% else %}Add scheduled bill{% endif %}</h1>
+      <p>It'll show up on the calendar and feed into the running balance forecast.</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('main.dashboard') }}">← Back to dashboard</a>
+  </div>
+
+  <form class="form-card" method="POST">
+    <h2>{% if bill %}{{ bill.name }}{% else %}New bill or income{% endif %}</h2>
+    <p class="form-sub">Recurring or one-off. Editable later.</p>
+
+    <div class="form-row">
+      <label>Description</label>
+      <input type="text" name="name" value="{{ bill.name if bill else '' }}" placeholder="e.g. Origin Energy" required>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Amount ($)</label>
+        <input type="number" name="amount" step="0.01"
+          value="{{ bill.amount|abs if bill else '' }}"
+          placeholder="247.50" required>
+      </div>
+      <div class="form-row">
+        <label>Type</label>
+        <select name="type" required>
+          <option value="bill" {% if bill and bill.amount < 0 %}selected{% endif %}>Bill (money out)</option>
+          <option value="income" {% if bill and bill.amount > 0 %}selected{% endif %}>Income (money in)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Date</label>
+        <input type="date" name="next_date"
+          value="{{ bill.next_date if bill else (prefilled_date or '') }}" required>
+      </div>
+      <div class="form-row">
+        <label>Repeats</label>
+        <select name="recurring">
+          {% for r, label in [('once','One-off'),('weekly','Weekly'),('fortnightly','Fortnightly'),('monthly','Monthly'),('quarterly','Quarterly'),('yearly','Yearly')] %}
+          <option value="{{ r }}" {% if bill and bill.recurring == r %}selected{% elif not bill and r == 'monthly' %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label>From account</label>
+      <select name="account_id" required>
+        {% for a in accounts %}
+        <option value="{{ a.id }}" {% if bill and bill.account_id == a.id %}selected{% endif %}>
+          {{ a.bank }} — {{ a.name }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-row">
+      <label>Category (optional)</label>
+      <input type="text" name="category" value="{{ bill.category if bill and bill.category else '' }}" placeholder="e.g. Utilities · Electricity">
+    </div>
+
+    <div class="form-actions">
+      <div>
+        {% if bill %}
+        <form method="POST" action="{{ url_for('main.delete_bill', bid=bill.id) }}" style="display:inline;" onsubmit="return confirm('Delete this scheduled bill? This cannot be undone.');">
+          <button type="submit" class="btn danger">Delete</button>
+        </form>
+        {% endif %}
+      </div>
+      <div class="form-actions-right">
+        <a class="btn ghost" href="{{ url_for('main.dashboard') }}">Cancel</a>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
