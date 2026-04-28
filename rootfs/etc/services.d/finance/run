@@ -1,0 +1,20 @@
+#!/usr/bin/with-contenv bashio
+# ==============================================================================
+# Start the Hepburn Finance Flask app
+# ==============================================================================
+
+# Pull config values from HA add-on options into env vars
+export FAMILY_NAME=$(bashio::config 'family_name')
+export PRIMARY_USER=$(bashio::config 'primary_user')
+export SECONDARY_USER=$(bashio::config 'secondary_user')
+export AI_PROVIDER=$(bashio::config 'ai_provider')
+export AI_API_KEY=$(bashio::config 'ai_api_key')
+export NOTIFY_SERVICE=$(bashio::config 'notify_service')
+export MORNING_DIGEST_TIME=$(bashio::config 'morning_digest_time')
+export BILL_REMINDER_DAYS=$(bashio::config 'bill_reminder_days')
+
+bashio::log.info "Starting Hepburn Finance for ${FAMILY_NAME} family..."
+bashio::log.info "AI provider: ${AI_PROVIDER}"
+
+cd /finance
+exec python3 -m app.main

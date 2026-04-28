@@ -1,0 +1,44 @@
+---
+name: Hepburn Finance
+version: "0.1.0"
+slug: hepburn_finance
+description: Family finance dashboard with cash flow forecasting, scheduled bills, and AI-assisted insights
+url: https://github.com/HepAU/hepburn-finance
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: services
+boot: auto
+ports:
+  8765/tcp: 8765
+ports_description:
+  8765/tcp: Web UI port (also accessible via Ingress)
+ingress: true
+ingress_port: 8765
+panel_icon: mdi:finance
+panel_title: Finance
+hassio_api: true
+homeassistant_api: false
+host_network: false
+map:
+  - share:rw
+  - backup:rw
+options:
+  family_name: "Hepburn"
+  primary_user: "Luke"
+  secondary_user: "Peta"
+  ai_provider: "none"
+  ai_api_key: ""
+  notify_service: ""
+  morning_digest_time: "07:00"
+  bill_reminder_days: 3
+schema:
+  family_name: str
+  primary_user: str
+  secondary_user: str?
+  ai_provider: list(none|claude|gemini)
+  ai_api_key: password?
+  notify_service: str?
+  morning_digest_time: str
+  bill_reminder_days: int(0,30)
