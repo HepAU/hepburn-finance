@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>Edit transaction</h1>
+      <p>{{ tx.account_name }} · {{ tx.date }}</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('main.list_transactions') }}">← All transactions</a>
+  </div>
+
+  <form class="form-card" method="POST">
+    <h2>{{ tx.description }}</h2>
+    <p class="form-sub">Original raw text: <code>{{ tx.raw_description or tx.description }}</code></p>
+
+    <div class="form-row">
+      <label>Description</label>
+      <input type="text" name="description" value="{{ tx.description }}" required>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Amount ($)</label>
+        <input type="number" name="amount" step="0.01" value="{{ tx.amount }}" required>
+        <p class="form-hint" style="margin-top: 4px;">Positive = money in, negative = money out</p>
+      </div>
+      <div class="form-row checkbox-row" style="align-self: end; padding-bottom: 16px;">
+        <input type="checkbox" name="is_internal_transfer" id="is_internal_transfer"
+          {% if tx.is_internal_transfer %}checked{% endif %}>
+        <label for="is_internal_transfer">Internal transfer (between own accounts)</label>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label>Category <span class="form-hint">(autocomplete)</span></label>
+      <input type="text" name="category" list="category-list" value="{{ tx.category if tx.category and tx.category != 'Uncategorised' else '' }}" placeholder="e.g. Groceries, Subscriptions · Streaming">
+      <datalist id="category-list">
+        {% for c in categories %}<option value="{{ c }}">{% endfor %}
+      </datalist>
+    </div>
+
+    <div class="form-row">
+      <label>Notes <span class="form-hint">(optional)</span></label>
+      <textarea name="notes" rows="2" placeholder="Anything to remember about this transaction">{{ tx.notes or '' }}</textarea>
+    </div>
+
+    {% if similar %}
+    <div class="form-card" style="background: var(--bg-1); margin: 16px 0; padding: 14px;">
+      <h3 style="margin-top: 0; font-size: 14px;">📋 Apply this category to similar transactions?</h3>
+      <p class="form-sub" style="margin-bottom: 12px;">
+        Found {{ similar|length }} other untagged transaction{{ 's' if similar|length != 1 else '' }} with similar descriptions:
+      </p>
+      <ul style="margin: 0 0 12px; padding-left: 20px; font-size: 12px; color: var(--text-2);">
+        {% for s in similar %}
+        <li><strong>{{ s.date }}</strong> — {{ s.description }} (${{ '%.2f'|format(s.amount|abs) }})</li>
+        {% endfor %}
+      </ul>
+      <div class="form-row checkbox-row" style="margin: 0;">
+        <input type="checkbox" name="apply_to_similar" id="apply_to_similar">
+        <label for="apply_to_similar">Yes, tag all of these with the same category</label>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="form-actions">
+      <div>
+        <form method="POST" action="{{ url_for('main.delete_transaction', tid=tx.id) }}" style="display:inline;" onsubmit="return confirm('Delete this transaction permanently? This cannot be undone.');">
+          <button type="submit" class="btn danger">Delete</button>
+        </form>
+      </div>
+      <div class="form-actions-right">
+        <a class="btn ghost" href="{{ url_for('main.list_transactions') }}">Cancel</a>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}

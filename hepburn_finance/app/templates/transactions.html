@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% macro fmt_money(n, dp=2) %}
+{%- if n is none -%}—{%- else -%}
+{%- set abs_n = n if n >= 0 else -n -%}
+{{- ('-' if n < 0 else '') }}${{ '{:,.{}f}'.format(abs_n, dp) }}
+{%- endif -%}
+{% endmacro %}
+
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>Transactions</h1>
+      <p>Click any row to edit. Showing the most recent 200.</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('main.dashboard') }}">← Back to dashboard</a>
+  </div>
+
+  <form class="form-card" method="GET" style="padding: 14px 16px;">
+    <div class="form-grid-2">
+      <div class="form-row" style="margin-bottom: 0;">
+        <input type="text" name="q" value="{{ q }}" placeholder="Search description...">
+      </div>
+      <div class="form-row" style="margin-bottom: 0;">
+        <select name="cat">
+          <option value="">All categories</option>
+          {% for c in categories %}
+          <option value="{{ c }}" {% if c == cat %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-grid-2" style="margin-top: 8px;">
+      <div class="form-row" style="margin-bottom: 0;">
+        <select name="account">
+          <option value="">All accounts</option>
+          {% for a in accounts %}
+          <option value="{{ a.id }}" {% if a.id|string == aid %}selected{% endif %}>{{ a.bank }} — {{ a.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center; justify-content: flex-end;">
+        <button type="submit" class="btn primary">Filter</button>
+        <a href="{{ url_for('main.list_transactions') }}" class="btn ghost">Clear</a>
+      </div>
+    </div>
+  </form>
+
+  <div class="panel" style="padding: 0;">
+    <table class="tx-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Description</th>
+          <th>Account</th>
+          <th>Category</th>
+          <th class="ralign">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in transactions %}
+        <tr class="tx-row{% if t.is_internal_transfer %} tx-internal{% endif %}" onclick="window.location='{{ url_for('main.edit_transaction', tid=t.id) }}'">
+          <td class="tx-date">{{ t.date }}</td>
+          <td class="tx-desc-cell">
+            {{ t.description }}
+            {% if t.is_internal_transfer %}<span class="tag-internal">Internal</span>{% endif %}
+            {% if t.notes %}<div class="tx-note">{{ t.notes }}</div>{% endif %}
+          </td>
+          <td class="tx-account">{{ t.account_name }}</td>
+          <td>
+            {% if t.category and t.category != 'Uncategorised' %}
+            <span class="tx-cat-tag">{{ t.category }}</span>
+            {% else %}
+            <span class="tx-cat-tag tx-cat-untagged">Uncategorised</span>
+            {% endif %}
+          </td>
+          <td class="ralign tx-amount-cell {% if t.amount > 0 %}positive{% else %}negative{% endif %}">
+            {{ fmt_money(t.amount) }}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="text-align: center; padding: 24px; color: var(--text-3);">No transactions match.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -290,9 +290,28 @@ def debt_attack_order():
             })
             rank += 1
 
+    # Personal loans (solar, car, etc.) — non-deductible, formal
+    for acc in accounts:
+        if acc['type'] == 'loan_personal':
+            rate = acc['interest_rate']
+            if rate is None:
+                rate_str = '—'
+            else:
+                rate_str = f'{rate:.1f}%'
+            items.append({
+                'rank': rank,
+                'priority': 3,
+                'name': acc['name'],
+                'detail': 'Personal loan — non-deductible interest',
+                'amount': acc['balance'],
+                'rate': rate_str,
+                'rate_class': 'cool',
+            })
+            rank += 1
+
     # Investment loans
     for acc in accounts:
-        if acc['type'] == 'loan':
+        if acc['type'] == 'loan_investment':
             rate = acc['interest_rate']
             if rate is None:
                 rate_str = '~6.0% *'
@@ -306,6 +325,25 @@ def debt_attack_order():
                 'amount': acc['balance'],
                 'rate': rate_str,
                 'rate_class': 'deductible',
+            })
+            rank += 1
+
+    # Informal loans (borrowed from family/friends/work) — usually 0% but socially-prioritised
+    for acc in accounts:
+        if acc['type'] == 'loan_informal':
+            rate = acc['interest_rate']
+            if rate is None or rate == 0:
+                rate_str = '0% — informal'
+            else:
+                rate_str = f'{rate:.1f}%'
+            items.append({
+                'rank': rank,
+                'priority': 4,
+                'name': acc['name'],
+                'detail': 'Informal — owed to family / friend / work',
+                'amount': acc['balance'],
+                'rate': rate_str,
+                'rate_class': 'informal',
             })
             rank += 1
 

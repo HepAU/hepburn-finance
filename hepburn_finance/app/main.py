@@ -65,8 +65,8 @@ def seed_initial_accounts():
             ('Bendigo', 'Holiday Funds',          'Sub-account',          '223 214 859', 'savings',     0.00,     None,  None, None, 0),
             ('Bendigo', 'Tax Account',            'Sub-account',          '223 214 867', 'savings',     0.00,     None,  None, None, 0),
             ('Bendigo', 'Mortgage Loan (PPOR)',   'P&I home loan',        '703 950 915', 'ppor',        -545429.61, None, None, 6.0,  0),
-            ('Bendigo', 'Robina Mortgage',        'Investment property',  '703 952 259', 'loan',        -363533.74, None, None, 6.0,  1),
-            ('Bendigo', 'Nundah Mortgage',        'Investment property',  '703 952 309', 'loan',        -405400.00, None, None, 6.0,  1),
+            ('Bendigo', 'Robina Mortgage',        'Investment property',  '703 952 259', 'loan_investment',        -363533.74, None, None, 6.0,  1),
+            ('Bendigo', 'Nundah Mortgage',        'Investment property',  '703 952 309', 'loan_investment',        -405400.00, None, None, 6.0,  1),
         ]
         latitude = [
             ('Latitude', 'Gem Visa', '6010 ···· 8259', '6010 7320 0426 8259', 'credit', -14549.64, 450.36, 15000, 28.49, 0),

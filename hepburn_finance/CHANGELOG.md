@@ -2,6 +2,28 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.2.0] — 2026-04-29
+
+The transactions release. Click any transaction to edit it, bulk-tag similar ones, internal transfers auto-detect on CSV upload, and account types now include personal/informal loans alongside the existing investment loan and PPOR.
+
+### Added
+- **Transactions browser** at `/transactions` — filter by description, category, or account. Click any row to edit.
+- **Transaction edit page** — fix description, amount, category, mark as internal transfer, add notes, delete. Editing flips `user_categorised` so it sticks even if rules change later.
+- **Bulk-tag similar transactions** — when editing one transaction, if there are other untagged transactions with similar descriptions, a checkbox offers to apply the same category to all of them at once.
+- **Internal transfer auto-detection on CSV upload** — pair-matching by date + magnitude + opposite signs in different accounts. Hardcoded recognition of Bendigo sub-account reference numbers (00571644691402-405) so untagged Peta transfers get categorised correctly. Both legs marked as `Transfer · Internal`, excluded from spending totals.
+- **Past transactions on calendar** — past days now show an aggregated count and total of the day's spending (e.g. "3× $148"), separate from the future forecast.
+- **Reconciliation page** at `/accounts/<id>/reconcile` — compares manual balance to sum of imported transactions. Useful sanity check after CSV imports. Access via the ⚖ icon on any account card on hover.
+- **Three new account types**: `loan_personal` (solar, car, BNPL — non-deductible), `loan_informal` (borrowed from family/friends/work), and `loan_investment` (renamed from old `loan` — tax-deductible). Existing `loan` accounts auto-migrate to `loan_investment`.
+
+### Changed
+- **Recent activity panel** on dashboard now hides internal transfers (they were noise — your transactions always look the same direction in/out without context).
+- **Recent activity rows are now clickable** — open the transaction edit page directly.
+- **Debt attack panel** distinguishes personal, informal, and investment loans separately. The deductibility footnote applies only to investment loans now, not all loans.
+
+### Migration
+- Schema migration handles old databases automatically. Existing `loan`-typed accounts become `loan_investment`. After upgrade, manually re-classify any that should be `loan_personal` or `loan_informal` (e.g. Keith Howieson, PVRSC if those weren't actually investment properties).
+- Dropped strict `CHECK` constraint on account `type` — application-side validation now, future-friendly.
+
 ## [0.1.4] — 2026-04-29
 
 ### Fixed

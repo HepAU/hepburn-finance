@@ -829,3 +829,149 @@ a:hover { text-decoration: underline; }
   .visa-summary-stat:nth-child(4) { display: none; }
   .form-grid-2 { grid-template-columns: 1fr; }
 }
+
+/* Transaction list table */
+.tx-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.tx-table thead {
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line);
+}
+.tx-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  font-weight: 500;
+}
+.tx-table th.ralign { text-align: right; }
+.tx-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.tx-table tbody tr {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.tx-table tbody tr:hover {
+  background: var(--bg-1);
+}
+.tx-row.tx-internal {
+  opacity: 0.6;
+}
+.tx-date {
+  white-space: nowrap;
+  color: var(--text-2);
+  font-feature-settings: 'tnum';
+  font-size: 12px;
+}
+.tx-desc-cell {
+  font-weight: 500;
+  max-width: 320px;
+}
+.tx-account {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.tx-amount-cell {
+  font-feature-settings: 'tnum';
+  white-space: nowrap;
+  font-weight: 500;
+}
+.tx-amount-cell.positive { color: var(--green); }
+.tx-amount-cell.negative { color: var(--text); }
+.tx-cat-untagged {
+  background: var(--amber-bg) !important;
+  color: var(--amber) !important;
+}
+.tx-note {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 3px;
+  font-style: italic;
+}
+.tag-internal {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--blue-bg);
+  color: var(--blue);
+  font-size: 10px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+.tx-item-clickable {
+  cursor: pointer;
+  transition: background 0.1s;
+  padding: 8px 4px !important;
+  margin: 0 -4px;
+  border-radius: 4px;
+}
+.tx-item-clickable:hover {
+  background: var(--bg-1);
+}
+
+/* Reconciliation banner */
+.reconcile-banner {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: var(--amber-bg);
+  border: 1px solid var(--amber);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.reconcile-banner.match {
+  background: var(--green-bg);
+  border-color: var(--green);
+}
+.reconcile-banner button {
+  margin-left: auto;
+  padding: 4px 10px;
+  background: var(--text);
+  color: var(--bg);
+  border: 0;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* Past transaction summary on calendar */
+.cal-past-summary {
+  font-size: 10px;
+  font-weight: 500;
+  font-feature-settings: 'tnum';
+  margin-top: 2px;
+  opacity: 0.65;
+}
+.cal-past-summary.past-out { color: var(--text-3); }
+.cal-past-summary.past-in { color: var(--green); opacity: 0.7; }
+
+/* Reconcile button on account cards */
+.acc-reconcile {
+  position: absolute;
+  top: 10px; right: 38px;
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  background: var(--bg-3);
+  color: var(--text-3);
+  display: grid; place-items: center;
+  font-size: 12px;
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  z-index: 2;
+}
+.account-card:hover .acc-reconcile { opacity: 1; }
+.acc-reconcile:hover { background: var(--blue); color: var(--bg-0); text-decoration: none; }
+.account-card.selected .acc-reconcile { opacity: 1; top: 36px; }

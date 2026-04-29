@@ -61,6 +61,86 @@ def _validate_future_date(date_str):
         return None, 'Invalid date format'
 
 
+# Bendigo reference number → account name mapping for auto-categorisation.
+# When Peta moves money between sub-accounts without entering a description,
+# Bendigo populates the description with the destination account number.
+# This map lets us turn those into readable transfers.
+BENDIGO_INTERNAL_REFS = {
+    '00571644691402': 'Income & Bills Account',
+    '00571644691403': 'Rainy Day Funds',
+    '00571644691404': 'Other Peoples Money',
+    '00571644691405': 'Holiday Funds',
+}
+
+
+def _auto_detect_transfers(conn):
+    """Pair-match internal transfers across the user's accounts.
+
+    Two passes:
+    1. Bendigo reference-number heuristic: descriptions matching one of the
+       known sub-account refs are tagged as internal regardless of pairing.
+    2. Pair-matching: same date + same magnitude + opposite signs +
+       different accounts = an internal transfer pair.
+
+    Returns count of matched pairs.
+    """
+    matched_pairs = 0
+
+    # Pass 1: Bendigo reference codes
+    for ref_code, target_name in BENDIGO_INTERNAL_REFS.items():
+        conn.execute(
+            "UPDATE transactions SET is_internal_transfer=1, "
+            "category='Transfer · Internal', user_categorised=1, "
+            "updated_at=datetime('now') "
+            "WHERE description LIKE ? AND (is_internal_transfer=0 OR is_internal_transfer IS NULL)",
+            (f'%{ref_code}%',)
+        )
+
+    # Pass 2: pair-match by date + magnitude across accounts
+    rows = conn.execute(
+        "SELECT id, account_id, date, amount FROM transactions "
+        "WHERE transfer_pair_id IS NULL"
+    ).fetchall()
+
+    from collections import defaultdict
+    buckets = defaultdict(list)
+    for r in rows:
+        key = (r['date'], round(abs(r['amount']), 2))
+        buckets[key].append(r)
+
+    matched_ids = set()
+    for key, candidates in buckets.items():
+        for i, a in enumerate(candidates):
+            if a['id'] in matched_ids:
+                continue
+            for b in candidates[i+1:]:
+                if b['id'] in matched_ids:
+                    continue
+                if (a['account_id'] != b['account_id']
+                        and ((a['amount'] > 0 and b['amount'] < 0)
+                             or (a['amount'] < 0 and b['amount'] > 0))):
+                    conn.execute(
+                        "UPDATE transactions SET is_internal_transfer=1, "
+                        "transfer_pair_id=?, category='Transfer · Internal', "
+                        "user_categorised=1, updated_at=datetime('now') "
+                        "WHERE id=?",
+                        (b['id'], a['id'])
+                    )
+                    conn.execute(
+                        "UPDATE transactions SET is_internal_transfer=1, "
+                        "transfer_pair_id=?, category='Transfer · Internal', "
+                        "user_categorised=1, updated_at=datetime('now') "
+                        "WHERE id=?",
+                        (a['id'], b['id'])
+                    )
+                    matched_ids.add(a['id'])
+                    matched_ids.add(b['id'])
+                    matched_pairs += 1
+                    break
+
+    return matched_pairs
+
+
 @bp.route('/')
 def dashboard():
     today = date.today()
@@ -73,6 +153,7 @@ def dashboard():
         recent_tx = conn.execute(
             "SELECT t.*, a.name AS account_name "
             "FROM transactions t JOIN accounts a ON t.account_id = a.id "
+            "WHERE t.is_internal_transfer = 0 OR t.is_internal_transfer IS NULL "
             "ORDER BY t.date DESC, t.id DESC LIMIT 10"
         ).fetchall()
         plans = conn.execute(
@@ -107,11 +188,14 @@ def dashboard():
         for a in all_accounts
         if a['type'] in ('transaction', 'savings')
     )
-    debt_total = sum(a['balance'] for a in all_accounts if a['type'] in ('loan', 'ppor'))
+    debt_total = sum(
+        a['balance'] for a in all_accounts
+        if a['type'] in ('loan_investment', 'loan_personal', 'loan_informal', 'ppor', 'loan')
+    )
     credit_total = sum(a['balance'] for a in all_accounts if a['type'] == 'credit')
     redraw_total = sum(
         (a['available_redraw'] or 0) for a in all_accounts
-        if a['type'] in ('loan', 'ppor')
+        if a['type'] in ('loan_investment', 'loan_personal', 'ppor', 'loan')
     )
 
     return render_template(
@@ -495,6 +579,257 @@ def delete_transfer(tid):
     return redirect(url_for('main.dashboard'))
 
 
+# ---------- Transactions ----------
+
+@bp.route('/transactions')
+def list_transactions():
+    """Browse transactions with filtering/searching."""
+    q = request.args.get('q', '').strip()
+    cat = request.args.get('cat', '').strip()
+    aid = request.args.get('account', '').strip()
+
+    sql = ("SELECT t.*, a.name AS account_name "
+           "FROM transactions t JOIN accounts a ON t.account_id = a.id "
+           "WHERE 1=1")
+    params = []
+    if q:
+        sql += " AND (t.description LIKE ? OR t.raw_description LIKE ?)"
+        params.extend([f'%{q}%', f'%{q}%'])
+    if cat:
+        sql += " AND t.category = ?"
+        params.append(cat)
+    if aid:
+        try:
+            sql += " AND t.account_id = ?"
+            params.append(int(aid))
+        except ValueError:
+            pass
+    sql += " ORDER BY t.date DESC, t.id DESC LIMIT 200"
+
+    with get_db() as conn:
+        txs = conn.execute(sql, params).fetchall()
+        accounts = conn.execute(
+            "SELECT id, name, bank FROM accounts WHERE archived=0 ORDER BY bank, name"
+        ).fetchall()
+
+    return render_template(
+        'transactions.html',
+        transactions=[dict(t) for t in txs],
+        accounts=accounts,
+        categories=_all_categories(),
+        q=q, cat=cat, aid=aid,
+    )
+
+
+@bp.route('/transactions/<int:tid>/edit', methods=['GET', 'POST'])
+def edit_transaction(tid):
+    with get_db() as conn:
+        tx = conn.execute(
+            "SELECT t.*, a.name AS account_name FROM transactions t "
+            "JOIN accounts a ON t.account_id = a.id WHERE t.id=?",
+            (tid,)
+        ).fetchone()
+        if not tx:
+            return 'Not found', 404
+
+        if request.method == 'POST':
+            new_category = request.form.get('category', '').strip() or None
+            new_description = request.form.get('description', '').strip()
+            new_amount = float(request.form['amount'])
+            new_notes = request.form.get('notes', '').strip() or None
+            new_is_internal = 1 if request.form.get('is_internal_transfer') else 0
+
+            conn.execute(
+                "UPDATE transactions SET category=?, description=?, amount=?, "
+                "notes=?, is_internal_transfer=?, user_categorised=1, "
+                "updated_at=datetime('now') WHERE id=?",
+                (new_category, new_description, new_amount, new_notes, new_is_internal, tid)
+            )
+
+            # Bulk apply: did they ask to apply this category to similar transactions?
+            apply_to_similar = request.form.get('apply_to_similar')
+            if apply_to_similar and new_category:
+                # Match other uncategorised transactions with similar description
+                old_desc = tx['description']
+                # Use a robust LIKE match — strip down to first non-numeric word for matching
+                like_pattern = '%' + (old_desc.split()[0] if old_desc else old_desc) + '%'
+                cur = conn.execute(
+                    "UPDATE transactions SET category=?, user_categorised=1, "
+                    "updated_at=datetime('now') "
+                    "WHERE id != ? AND description LIKE ? "
+                    "AND (category IS NULL OR category='Uncategorised' OR user_categorised=0)",
+                    (new_category, tid, like_pattern)
+                )
+                affected = cur.rowcount
+                if affected > 0:
+                    conn.execute(
+                        "INSERT INTO notifications_log (kind, title, body) VALUES (?,?,?)",
+                        ('bulk_categorise', f'Tagged {affected} similar transactions',
+                         f'Pattern: "{like_pattern}" → {new_category}')
+                    )
+
+            return redirect(url_for('main.list_transactions'))
+
+    # Find similar untagged transactions to offer bulk-tag
+    similar = []
+    if tx['description']:
+        first_word = tx['description'].split()[0] if tx['description'] else ''
+        if first_word:
+            with get_db() as conn:
+                similar = conn.execute(
+                    "SELECT id, description, amount, date FROM transactions "
+                    "WHERE id != ? AND description LIKE ? "
+                    "AND (category IS NULL OR category='Uncategorised' OR user_categorised=0) "
+                    "ORDER BY date DESC LIMIT 5",
+                    (tid, f'%{first_word}%')
+                ).fetchall()
+
+    return render_template(
+        'transaction_form.html',
+        tx=dict(tx),
+        categories=_all_categories(),
+        similar=[dict(s) for s in similar],
+    )
+
+
+@bp.route('/transactions/<int:tid>/delete', methods=['POST'])
+def delete_transaction(tid):
+    with get_db() as conn:
+        conn.execute('DELETE FROM transactions WHERE id=?', (tid,))
+    return redirect(url_for('main.list_transactions'))
+
+
+@bp.route('/transactions/detect-transfers', methods=['POST'])
+def detect_internal_transfers():
+    """Pair-match internal transfers across the user's accounts.
+
+    Looks for transactions with same date, opposite-sign amounts of the
+    same magnitude, in different accounts. Marks both legs as
+    is_internal_transfer=1, links them via transfer_pair_id, and tags both
+    with category 'Transfer · Internal'.
+
+    Also handles the Bendigo case where descriptions are just numeric
+    reference codes — they don't need matching since they're already known
+    to be internal moves.
+    """
+    matched_pairs = 0
+    with get_db() as conn:
+        # First pass: pair-match by date + magnitude across accounts
+        rows = conn.execute(
+            "SELECT id, account_id, date, amount, description "
+            "FROM transactions "
+            "WHERE is_internal_transfer=0 OR is_internal_transfer IS NULL"
+        ).fetchall()
+
+        # Index by (date, abs_amount) for quick pair-finding
+        from collections import defaultdict
+        buckets = defaultdict(list)
+        for r in rows:
+            key = (r['date'], round(abs(r['amount']), 2))
+            buckets[key].append(r)
+
+        for key, candidates in buckets.items():
+            # Need at least one positive and one negative in different accounts
+            for i, a in enumerate(candidates):
+                for b in candidates[i+1:]:
+                    if (a['account_id'] != b['account_id']
+                            and ((a['amount'] > 0 and b['amount'] < 0)
+                                 or (a['amount'] < 0 and b['amount'] > 0))):
+                        # It's a match
+                        conn.execute(
+                            "UPDATE transactions SET is_internal_transfer=1, "
+                            "transfer_pair_id=?, category='Transfer · Internal', "
+                            "user_categorised=1, updated_at=datetime('now') "
+                            "WHERE id IN (?, ?)",
+                            (b['id'], a['id'], b['id'])
+                        )
+                        # Set b's pair to a
+                        conn.execute(
+                            "UPDATE transactions SET transfer_pair_id=? WHERE id=?",
+                            (a['id'], b['id'])
+                        )
+                        matched_pairs += 1
+                        break  # Only match each transaction once
+
+    return jsonify({'matched_pairs': matched_pairs})
+
+
+@bp.route('/accounts/<int:aid>/reconcile')
+def reconcile_account_view(aid):
+    """Show a reconciliation report for an account: manual balance vs tx sum."""
+    with get_db() as conn:
+        acc = conn.execute('SELECT * FROM accounts WHERE id=?', (aid,)).fetchone()
+        if not acc:
+            return 'Not found', 404
+        tx_sum = conn.execute(
+            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE account_id=? '
+            'AND (is_internal_transfer=0 OR is_internal_transfer IS NULL)',
+            (aid,)
+        ).fetchone()[0]
+        tx_sum_with_internal = conn.execute(
+            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE account_id=?',
+            (aid,)
+        ).fetchone()[0]
+        first_tx = conn.execute(
+            'SELECT date, amount FROM transactions WHERE account_id=? ORDER BY date ASC LIMIT 1',
+            (aid,)
+        ).fetchone()
+        last_tx = conn.execute(
+            'SELECT date FROM transactions WHERE account_id=? ORDER BY date DESC LIMIT 1',
+            (aid,)
+        ).fetchone()
+        tx_count = conn.execute(
+            'SELECT COUNT(*) FROM transactions WHERE account_id=?',
+            (aid,)
+        ).fetchone()[0]
+
+    return render_template(
+        'reconcile.html',
+        account=dict(acc),
+        tx_sum=round(tx_sum, 2),
+        tx_sum_with_internal=round(tx_sum_with_internal, 2),
+        tx_count=tx_count,
+        first_tx_date=first_tx['date'] if first_tx else None,
+        last_tx_date=last_tx['date'] if last_tx else None,
+        difference=round(acc['balance'] - tx_sum, 2),
+    )
+
+
+@bp.route('/transactions/reconcile/<int:aid>')
+def reconcile_account(aid):
+    """Compare manual balance to transaction-derived balance for an account."""
+    with get_db() as conn:
+        acc = conn.execute('SELECT * FROM accounts WHERE id=?', (aid,)).fetchone()
+        if not acc:
+            return 'Not found', 404
+        tx_sum = conn.execute(
+            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE account_id=?',
+            (aid,)
+        ).fetchone()[0]
+        first_tx = conn.execute(
+            'SELECT date, amount FROM transactions WHERE account_id=? '
+            'ORDER BY date ASC LIMIT 1',
+            (aid,)
+        ).fetchone()
+        last_tx = conn.execute(
+            'SELECT date FROM transactions WHERE account_id=? '
+            'ORDER BY date DESC LIMIT 1',
+            (aid,)
+        ).fetchone()
+
+    return jsonify({
+        'account_id': aid,
+        'name': acc['name'],
+        'manual_balance': acc['balance'],
+        'tx_sum': round(tx_sum, 2),
+        'difference': round(acc['balance'] - tx_sum, 2),
+        'first_tx_date': first_tx['date'] if first_tx else None,
+        'last_tx_date': last_tx['date'] if last_tx else None,
+    })
+
+
+
+
 # ---------- Upload ----------
 
 @bp.route('/upload', methods=['GET', 'POST'])
@@ -537,8 +872,10 @@ def upload():
                     )
                     new_count += 1
                 except Exception:
-                    # Most likely UNIQUE constraint on fingerprint — duplicate, skip silently
                     pass
+
+            # Run pair-matching to auto-detect internal transfers across accounts
+            transfer_pairs = _auto_detect_transfers(conn)
 
         return render_template(
             'upload_result.html',
@@ -547,6 +884,7 @@ def upload():
             duplicates=len(txs) - new_count,
             parser=parser_used,
             account_id=account_id,
+            transfer_pairs=transfer_pairs,
         )
 
     with get_db() as conn:
@@ -567,9 +905,30 @@ def api_forecast():
     balances, starting, instances = forecast_daily_balances(
         selected_ids, days_ahead=days, today=today
     )
+
+    # Past transactions in the visible window for the calendar
+    past_window_start = (today - timedelta(days=60)).isoformat()
+    with get_db() as conn:
+        if selected_ids:
+            placeholders = ','.join('?' * len(selected_ids))
+            past_rows = conn.execute(
+                f"SELECT date, COUNT(*) as count, SUM(amount) as total "
+                f"FROM transactions "
+                f"WHERE account_id IN ({placeholders}) "
+                f"AND date >= ? AND date < ? "
+                f"AND (is_internal_transfer = 0 OR is_internal_transfer IS NULL) "
+                f"GROUP BY date",
+                (*selected_ids, past_window_start, today.isoformat())
+            ).fetchall()
+        else:
+            past_rows = []
+        past_summary = {r['date']: {'count': r['count'], 'total': round(r['total'], 2)}
+                        for r in past_rows}
+
     return jsonify({
         'balances': balances,
         'starting': starting,
+        'past_summary': past_summary,
         'instances': [
             {
                 'date': i['date'].isoformat(),

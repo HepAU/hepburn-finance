@@ -21,8 +21,16 @@
       <div class="form-row">
         <label>Type</label>
         <select name="type" required>
-          {% for t, label in [('transaction','Transaction (everyday)'),('savings','Savings'),('credit','Credit card'),('ppor','Home loan (PPOR)'),('loan','Investment loan')] %}
-          <option value="{{ t }}" {% if account and account.type == t %}selected{% endif %}>{{ label }}</option>
+          {% for t, label in [
+            ('transaction','Transaction (everyday banking)'),
+            ('savings','Savings'),
+            ('credit','Credit card'),
+            ('ppor','Home loan (PPOR)'),
+            ('loan_investment','Investment loan (tax-deductible)'),
+            ('loan_personal','Personal loan (solar, car, BNPL)'),
+            ('loan_informal','Borrowed money (family / friend / work)'),
+          ] %}
+          <option value="{{ t }}" {% if account and account.type == t %}selected{% elif account and account.type == 'loan' and t == 'loan_investment' %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>

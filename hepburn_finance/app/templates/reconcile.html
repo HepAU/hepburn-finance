@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% macro fmt_money(n, dp=2) %}
+{%- if n is none -%}—{%- else -%}
+{%- set abs_n = n if n >= 0 else -n -%}
+{{- ('-' if n < 0 else '') }}${{ '{:,.{}f}'.format(abs_n, dp) }}
+{%- endif -%}
+{% endmacro %}
+
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>Reconcile · {{ account.name }}</h1>
+      <p>Compare the balance you entered manually with the sum of transactions imported from CSV.</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('main.dashboard') }}">← Back to dashboard</a>
+  </div>
+
+  <div class="form-card">
+    <h2>{{ account.name }}</h2>
+    <p class="form-sub">{{ account.bank }} · {{ account.type }}</p>
+
+    {% if tx_count == 0 %}
+    <div class="reconcile-banner">
+      <div>
+        <strong>No transactions imported yet.</strong> Reconciliation only makes sense once you've uploaded CSVs — there's nothing to compare to.
+      </div>
+    </div>
+    {% else %}
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Manual balance (what you entered)</label>
+        <div style="font-size: 22px; font-weight: 500; padding: 8px 0; font-feature-settings: 'tnum';">
+          {{ fmt_money(account.balance) }}
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Sum of transactions (excluding internal)</label>
+        <div style="font-size: 22px; font-weight: 500; padding: 8px 0; font-feature-settings: 'tnum';">
+          {{ fmt_money(tx_sum) }}
+        </div>
+      </div>
+    </div>
+
+    <div class="reconcile-banner {% if difference|abs < 0.01 %}match{% endif %}">
+      {% if difference|abs < 0.01 %}
+      <div>✓ <strong>Balances match exactly.</strong> The transactions add up to the manual balance figure.</div>
+      {% else %}
+      <div>
+        <strong>Difference: {{ fmt_money(difference) }}</strong><br>
+        <span style="font-size: 11px;">
+          This is normal if your CSV history doesn't go back to when the account was opened.
+          The manual balance is your "today" figure; the tx sum is just the imported transactions.
+        </span>
+      </div>
+      {% endif %}
+    </div>
+
+    <div style="margin-top: 20px; font-size: 12px; color: var(--text-3);">
+      <strong>Transactions:</strong> {{ tx_count }} total<br>
+      {% if first_tx_date %}<strong>Oldest:</strong> {{ first_tx_date }}<br>{% endif %}
+      {% if last_tx_date %}<strong>Newest:</strong> {{ last_tx_date }}<br>{% endif %}
+      <strong>Sum including internal transfers:</strong> {{ fmt_money(tx_sum_with_internal) }}
+    </div>
+    {% endif %}
+
+    <div class="form-actions">
+      <div></div>
+      <div class="form-actions-right">
+        <a class="btn" href="{{ url_for('main.list_transactions', account=account.id) }}">View transactions</a>
+        <a class="btn primary" href="{{ url_for('main.edit_account', aid=account.id) }}">Edit account</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

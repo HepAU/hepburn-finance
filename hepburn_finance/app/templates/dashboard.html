@@ -28,6 +28,7 @@
       <p>{{ today_str }} — focusing on the next 30 days</p>
     </div>
     <div class="top-actions">
+      <a class="btn" href="{{ url_for('main.list_transactions') }}">Transactions</a>
       <a class="btn" href="{{ url_for('main.upload') }}">Upload CSV</a>
       <a class="btn" href="{{ url_for('main.new_afterpay') }}">+ Afterpay</a>
       <a class="btn" href="{{ url_for('main.new_transfer') }}">+ Transfer</a>
@@ -135,6 +136,7 @@
       {% for a in accs %}
       <div class="account-card{% if a.id in selected_ids %} selected{% endif %}" data-id="{{ a.id }}">
         <a class="acc-edit" href="{{ url_for('main.edit_account', aid=a.id) }}" title="Edit account" onclick="event.stopPropagation()">✎</a>
+        <a class="acc-reconcile" href="{{ url_for('main.reconcile_account_view', aid=a.id) }}" title="Reconcile manual balance vs transactions" onclick="event.stopPropagation()">⚖</a>
         <div class="acc-header-row">
           <span class="acc-type-tag {{ a.type }}">
             {% if a.type == 'ppor' %}PPOR{% else %}{{ a.type }}{% endif %}
@@ -154,12 +156,12 @@
           </div>
         {% else %}
           <div class="acc-balance
-            {%- if a.type in ['loan','ppor'] %} neutral
+            {%- if a.type in ['loan','ppor','loan_investment','loan_personal','loan_informal'] %} neutral
             {%- elif a.balance == 0 %} dim
             {%- elif a.balance < 0 %} danger
             {%- elif a.type == 'transaction' and a.balance < 200 %} warn
             {%- endif %}">{{ fmt_money(a.balance) }}</div>
-          {% if a.type in ['loan','ppor'] and a.available_redraw and a.available_redraw > 0 %}
+          {% if a.type in ['loan','ppor','loan_investment','loan_personal'] and a.available_redraw and a.available_redraw > 0 %}
           <div class="acc-balance-secondary">
             <span class="acc-balance-label">Redraw</span> {{ fmt_money(a.available_redraw, 0) }}
           </div>
@@ -274,9 +276,12 @@
         </div>
         <ul class="tx-list">
           {% for t in recent_tx %}
-          <li class="tx-item">
+          <li class="tx-item tx-item-clickable" onclick="window.location='{{ url_for('main.edit_transaction', tid=t.id) }}'">
             <div class="tx-info">
-              <div class="tx-desc">{{ t.description }}</div>
+              <div class="tx-desc">
+                {{ t.description }}
+                {% if t.is_internal_transfer %}<span class="tag-internal">Internal</span>{% endif %}
+              </div>
               <div class="tx-meta">
                 <span>{{ t.date }}</span>
                 {% if t.category %}<span class="tx-cat-tag">{{ t.category }}</span>{% endif %}
@@ -486,6 +491,13 @@ function renderCalendar() {
           else if (bal < 200) { balCls = 'warn'; cellClass = 'warn-bal'; }
           else if (bal < 500) balCls = 'warn';
           balHtml = `<div class="cal-balance ${balCls}">${fmtShort(bal)}</div>`;
+        }
+      } else if (isPast && FORECAST_DATA && FORECAST_DATA.past_summary) {
+        const k = dateKey(CAL_YEAR, CAL_MONTH, day);
+        const past = FORECAST_DATA.past_summary[k];
+        if (past) {
+          const totalCls = past.total < 0 ? 'past-out' : 'past-in';
+          balHtml = `<div class="cal-past-summary ${totalCls}">${past.count}× ${fmtShort(past.total)}</div>`;
         }
       }
 

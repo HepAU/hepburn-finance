@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     name TEXT NOT NULL,
     nickname TEXT,
     account_number TEXT,
-    type TEXT NOT NULL CHECK(type IN ('transaction','savings','credit','loan','ppor')),
+    type TEXT NOT NULL,
     balance REAL NOT NULL DEFAULT 0,
     available REAL,
     available_redraw REAL,
@@ -247,8 +247,7 @@ def run_migrations(conn):
     if not _column_exists(conn, 'scheduled_bills', 'occurrences_remaining'):
         conn.execute('ALTER TABLE scheduled_bills ADD COLUMN occurrences_remaining INTEGER')
 
-    # 0.1.3: scheduled_transfers table (CREATE TABLE IF NOT EXISTS in SCHEMA handles this,
-    # but we run it here too to make sure it's created on existing DBs)
+    # 0.1.3: scheduled_transfers table
     if not _table_exists(conn, 'scheduled_transfers'):
         conn.execute("""
             CREATE TABLE scheduled_transfers (
@@ -272,6 +271,94 @@ def run_migrations(conn):
                 CHECK(from_account_id != to_account_id)
             )
         """)
+
+    # 0.2.0: rebuild accounts table to drop the strict type CHECK constraint
+    # and migrate `loan` -> `loan_investment` to make room for new types:
+    # loan_personal (formal personal/solar/car loans) and loan_informal
+    # (borrowed from family/friends/work).
+    #
+    # SQLite needs a table-rebuild to change a CHECK constraint, so we
+    # detect the old constraint by trying to insert an unknown type and
+    # checking for failure.
+    needs_rebuild = False
+    try:
+        # If this insert succeeds, the old CHECK is gone. Roll back regardless.
+        conn.execute("SAVEPOINT type_check_test")
+        conn.execute(
+            "INSERT INTO accounts (bank, name, type) VALUES (?, ?, ?)",
+            ('__migration_test__', '__migration_test__', 'loan_personal')
+        )
+        conn.execute("ROLLBACK TO type_check_test")
+        conn.execute("RELEASE type_check_test")
+    except Exception:
+        # Old CHECK still in place
+        try:
+            conn.execute("ROLLBACK TO type_check_test")
+            conn.execute("RELEASE type_check_test")
+        except Exception:
+            pass
+        needs_rebuild = True
+
+    if needs_rebuild:
+        # Move old data, drop, recreate, copy back, drop temp.
+        # Foreign key constraints from transactions/scheduled_bills/scheduled_transfers
+        # reference accounts(id), so we keep ids stable.
+        conn.execute('PRAGMA foreign_keys = OFF')
+        conn.execute("""
+            CREATE TABLE accounts_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bank TEXT NOT NULL,
+                name TEXT NOT NULL,
+                nickname TEXT,
+                account_number TEXT,
+                type TEXT NOT NULL,
+                balance REAL NOT NULL DEFAULT 0,
+                available REAL,
+                available_redraw REAL,
+                credit_limit REAL,
+                interest_rate REAL,
+                is_deductible INTEGER DEFAULT 0,
+                include_in_forecast INTEGER DEFAULT 1,
+                selected_default INTEGER DEFAULT 0,
+                archived INTEGER DEFAULT 0,
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        # Copy with type translation: loan -> loan_investment
+        # COALESCE on timestamps in case old rows have NULLs
+        conn.execute("""
+            INSERT INTO accounts_new
+            SELECT id, bank, name, nickname, account_number,
+                   CASE WHEN type='loan' THEN 'loan_investment' ELSE type END,
+                   COALESCE(balance, 0),
+                   available, available_redraw, credit_limit,
+                   interest_rate,
+                   COALESCE(is_deductible, 0),
+                   COALESCE(include_in_forecast, 1),
+                   COALESCE(selected_default, 0),
+                   COALESCE(archived, 0),
+                   notes,
+                   COALESCE(created_at, datetime('now')),
+                   COALESCE(updated_at, datetime('now'))
+            FROM accounts
+        """)
+        conn.execute('DROP TABLE accounts')
+        conn.execute('ALTER TABLE accounts_new RENAME TO accounts')
+        conn.execute('PRAGMA foreign_keys = ON')
+
+    # 0.2.0: transaction edit support — add updated_at + notes columns,
+    # and is_internal_transfer flag for auto-detection
+    if not _column_exists(conn, 'transactions', 'updated_at'):
+        conn.execute('ALTER TABLE transactions ADD COLUMN updated_at TEXT')
+    if not _column_exists(conn, 'transactions', 'notes'):
+        conn.execute('ALTER TABLE transactions ADD COLUMN notes TEXT')
+    if not _column_exists(conn, 'transactions', 'is_internal_transfer'):
+        conn.execute('ALTER TABLE transactions ADD COLUMN is_internal_transfer INTEGER DEFAULT 0')
+    if not _column_exists(conn, 'transactions', 'transfer_pair_id'):
+        # Links the two legs of a detected internal transfer to each other.
+        conn.execute('ALTER TABLE transactions ADD COLUMN transfer_pair_id INTEGER')
 
 
 def init_db():

@@ -26,11 +26,22 @@ The dashboard models five entity types — getting these right matters for accur
 
 ### Accounts
 
-Each account has a **bank**, **name**, **type** (transaction / savings / credit / loan / ppor), and balance values:
+Each account has a **bank**, **name**, **type**, and balance values:
 
 - **Balance** — what the bank shows as the current balance
 - **Available** — what you can actually spend right now (factors in pending holds and authorisations). For transaction and credit accounts, the dashboard treats this as the *primary* number because it's what's actionable
 - **Available redraw** (loans only) — extra you've paid into the loan that you could pull back out. Treated as an emergency cushion, not regular spending money
+
+Account types:
+- `transaction` — everyday banking
+- `savings` — set-aside cash
+- `credit` — credit card (e.g. Latitude Gem Visa)
+- `ppor` — owner-occupier home loan
+- `loan_investment` — investment property loan (tax-deductible interest)
+- `loan_personal` — solar, car, personal loan, large BNPL (formal lender, non-deductible)
+- `loan_informal` — borrowed from family / friends / work
+
+The debt attack engine treats each loan type differently — investment loans are ranked lowest because their interest is tax-deductible; informal loans get their own line so you don't forget about them.
 
 ### Bills
 
@@ -56,7 +67,12 @@ This means your fortnightly mortgage payment correctly *reduces* your spendable 
 
 ### Transactions
 
-Actual money movements imported from CSV. They populate the "Recent activity" panel and feed the categorisation engine.
+Actual money movements imported from CSV.
+
+- **Edit any transaction** by clicking it in the recent activity panel or in the transactions browser (`/transactions`). Fix description, amount, category, mark as internal transfer, add notes, or delete entirely.
+- **Bulk-tag similar transactions**: when editing one transaction, the form offers to apply the same category to other untagged transactions with similar descriptions, in one click.
+- **Internal transfers auto-detected** on CSV upload — the system pair-matches transactions across accounts (same date, same magnitude, opposite signs) and tags them as `Transfer · Internal`. Bendigo reference numbers for sub-accounts are also recognised. Internal transfers are excluded from spending totals and the recent activity panel.
+- **Reconciliation**: hover any account card and click the ⚖ icon to compare the manual balance you entered with the sum of imported transactions.
 
 ### Interest-free plans
 

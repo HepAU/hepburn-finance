@@ -4,7 +4,7 @@
   <div class="topbar">
     <div>
       <h1>Upload complete</h1>
-      <p>Categorisation applied. Review and adjust on the dashboard.</p>
+      <p>Transactions imported and categorised. Internal transfers auto-detected.</p>
     </div>
     <a class="btn primary" href="{{ url_for('main.dashboard') }}">Back to dashboard</a>
   </div>
@@ -14,19 +14,32 @@
     <p class="form-sub">
       {{ total }} total in CSV ·
       {% if duplicates > 0 %}
-      <strong>{{ duplicates }} duplicate{{ 's' if duplicates != 1 else '' }} skipped</strong> (already in the database) ·
+      <strong>{{ duplicates }} duplicate{{ 's' if duplicates != 1 else '' }} skipped</strong> (already in database) ·
       {% endif %}
-      Parser used: {{ parser }}
+      Parser: {{ parser }}
     </p>
 
+    {% if transfer_pairs > 0 %}
+    <div class="reconcile-banner match">
+      <div>
+        ✓ Detected <strong>{{ transfer_pairs }} internal transfer pair{{ 's' if transfer_pairs != 1 else '' }}</strong> across your accounts.
+        These have been tagged <code>Transfer · Internal</code> and excluded from spending totals so they don't double-count as expenses.
+      </div>
+    </div>
+    {% endif %}
+
     {% if duplicates > 0 %}
-    <p class="form-sub" style="margin-top: -16px;">
+    <p class="form-sub" style="margin-top: 16px;">
       <span style="color: var(--text-2);">
         Duplicates are detected by fingerprint (account + date + amount + description).
-        It's safe to re-upload overlapping CSVs — only new transactions get added.
+        Re-uploading overlapping CSVs is safe — only new transactions get added.
       </span>
     </p>
     {% endif %}
+
+    <p class="form-sub" style="margin-top: 16px;">
+      Want to review or recategorise? <a href="{{ url_for('main.list_transactions') }}">Browse transactions</a>.
+    </p>
 
     <div class="form-actions">
       <div></div>
