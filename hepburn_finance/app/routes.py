@@ -956,6 +956,27 @@ def notify_test():
     return jsonify({'sent': ok, 'target': target or 'persistent_notification'})
 
 
+@bp.route('/api/ha-refresh', methods=['POST', 'GET'])
+def api_ha_refresh():
+    """Manually trigger a push of all finance sensors to HA.
+    Useful after big data changes (CSV upload, bulk edits)."""
+    try:
+        from app.ha_sensors import compute_and_push_all
+        ok = compute_and_push_all()
+        return jsonify({'pushed': ok})
+    except Exception as e:
+        logger.exception('HA refresh failed')
+        return jsonify({'pushed': False, 'error': str(e)}), 500
+
+
+@bp.route('/ha-dashboard')
+def ha_dashboard_help():
+    """Show the Lovelace card setup help page."""
+    import os as _os
+    has_token = bool(_os.environ.get('SUPERVISOR_TOKEN'))
+    return render_template('ha_dashboard.html', has_token=has_token)
+
+
 @bp.route('/health')
 def health():
     return jsonify({'status': 'ok'})

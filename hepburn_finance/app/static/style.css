@@ -294,17 +294,18 @@ a:hover { text-decoration: underline; }
 .acc-header-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .acc-type-tag {
   display: inline-block;
-  font-size: 9px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.05em;
-  padding: 2px 6px;
-  border-radius: 4px;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 2px 8px;
+  border-radius: 10px;
+  line-height: 1.5;
 }
 .acc-type-tag.transaction { background: var(--blue-bg); color: var(--blue); }
 .acc-type-tag.savings { background: var(--green-bg); color: var(--green); }
 .acc-type-tag.loan, .acc-type-tag.ppor,
 .acc-type-tag.loan_investment { background: var(--neutral-bg); color: var(--neutral); }
 .acc-type-tag.loan_personal { background: var(--amber-bg); color: var(--amber); }
-.acc-type-tag.loan_informal { background: var(--purple-bg); color: var(--purple); opacity: 0.8; }
+.acc-type-tag.loan_informal { background: var(--purple-bg); color: var(--purple); opacity: 0.85; }
 .acc-type-tag.credit { background: var(--purple-bg); color: var(--purple); }
 .acc-name { font-size: 13px; font-weight: 500; margin-bottom: 8px; line-height: 1.3; }
 .acc-balance {

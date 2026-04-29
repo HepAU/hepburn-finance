@@ -2,6 +2,29 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.3.0] — 2026-04-29
+
+The Home Assistant integration release. Cash flow status and upcoming bills are now native HA sensors you can put on any Lovelace dashboard, automate against, or notify on.
+
+### Added
+- **HA native sensors** (10 of them) auto-pushed every 5 minutes:
+  - `sensor.hepburn_finance_cash_today` — spendable cash today
+  - `sensor.hepburn_finance_balance_30d_low` — lowest 30-day forecast
+  - `sensor.hepburn_finance_days_until_zero` — days until balance hits zero
+  - `sensor.hepburn_finance_stress_tier` — green/amber/red status
+  - `sensor.hepburn_finance_next_bill_amount` — next bill (with full bills_list attribute for Lovelace)
+  - `sensor.hepburn_finance_bills_7d_total`, `_bills_14d_total`, `_upcoming_bills_count`
+  - `sensor.hepburn_finance_debt_total`, `_redraw_total`
+- **Lovelace card snippets** documented in `HA_DASHBOARD.md` and surfaced via the new `/ha-dashboard` page (linked from the dashboard topbar). Includes ready-to-paste YAML for upcoming bills, cash flow summary, glance, and stress-tier button card.
+- **Manual refresh endpoint** `/api/ha-refresh` to trigger an immediate sensor push (useful after a CSV upload or bulk edit).
+- **Permission required:** `homeassistant_api: true` is now in the add-on config. HA will prompt you to approve this on update.
+
+### Changed
+- **Account type tags are sentence-case now** — "Borrowed", "Personal loan", "Investment", "Home loan", "Credit card", "Everyday", "Savings". Tighter pill shape (rounded), still colour-coded by type. Replaces the all-caps ALL_CAPS_TYPES rendering from v0.2.x.
+
+### Note on the migration
+The v0.2.1 cleanup migration that scrubs literal `"None"` strings out of the database is included in this release. If you skipped v0.2.1, those will be cleared automatically on first start of v0.3.0.
+
 ## [0.2.1] — 2026-04-29
 
 ### Fixed

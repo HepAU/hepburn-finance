@@ -1,6 +1,6 @@
 ---
 name: Hepburn Finance
-version: "0.2.1"
+version: "0.3.0"
 slug: hepburn_finance
 description: Family finance dashboard with cash flow forecasting, scheduled bills, and AI-assisted insights
 url: https://github.com/HepAU/hepburn-finance
@@ -19,7 +19,7 @@ ingress_port: 8765
 panel_icon: mdi:finance
 panel_title: Finance
 hassio_api: true
-homeassistant_api: false
+homeassistant_api: true
 host_network: false
 map:
   - share:rw

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>Home Assistant dashboard card</h1>
+      <p>Surface upcoming bills and cash flow status directly on your HA dashboard.</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('main.dashboard') }}">← Back to dashboard</a>
+  </div>
+
+  {% if not has_token %}
+  <div class="form-card" style="border-left: 3px solid var(--amber);">
+    <h2 style="color: var(--amber);">⚠ HA API not connected</h2>
+    <p class="form-sub">
+      The add-on can't talk to Home Assistant — no <code>SUPERVISOR_TOKEN</code> in the environment.
+      This is normal if you're running the add-on outside HA, or if you upgraded from an older version
+      and haven't approved the API permission yet.
+    </p>
+    <p class="form-sub">
+      <strong>To fix:</strong> Restart the add-on. HA will prompt you to approve the new
+      <code>homeassistant_api</code> permission. Once approved, sensors will start showing up
+      under <code>sensor.hepburn_finance_*</code> within ~15 seconds.
+    </p>
+  </div>
+  {% else %}
+  <div class="form-card" style="border-left: 3px solid var(--green);">
+    <h2 style="color: var(--green);">✓ HA API connected</h2>
+    <p class="form-sub">
+      Finance sensors are being pushed to Home Assistant every 5 minutes.
+      <a href="{{ url_for('main.api_ha_refresh') }}">Trigger an immediate refresh</a> to verify.
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="form-card">
+    <h2>Step 1: Find your sensors in HA</h2>
+    <p class="form-sub">
+      In Home Assistant, go to <strong>Developer Tools → States</strong> and search
+      <code>hepburn_finance</code>. You should see at least 9 sensors. If you don't, the
+      sensors haven't been pushed yet — wait a minute or click the "trigger refresh" link above.
+    </p>
+
+    <h2 style="margin-top: 24px;">Step 2: Add a card to your Lovelace dashboard</h2>
+    <p class="form-sub">
+      Open any HA dashboard, click <strong>⋮ → Edit dashboard</strong>, then
+      <strong>+ Add card</strong>, scroll to the bottom, and pick <strong>Manual</strong>.
+      Paste any of these YAML blocks.
+    </p>
+
+    <h3 style="margin-top: 24px; font-size: 14px;">Upcoming bills (recommended)</h3>
+    <pre style="background: var(--bg-1); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; line-height: 1.5;">type: markdown
+title: Upcoming bills
+content: |
+  &#123;% set bills = state_attr('sensor.hepburn_finance_next_bill_amount', 'bills_list') or [] %&#125;
+  &#123;% if bills | length == 0 %&#125;
+  _No bills in the next 14 days_
+  &#123;% else %&#125;
+  &#123;% for b in bills %&#125;
+  - **&#123;&#123; b.date &#125;&#125;** · &#123;&#123; b.name &#125;&#125; · $&#123;&#123; '%.2f' | format(b.amount) &#125;&#125;&#123;% if b.days_away &lt;= 3 %&#125; ⚠️&#123;% endif %&#125;
+  &#123;% endfor %&#125;
+  &#123;% endif %&#125;</pre>
+
+    <h3 style="margin-top: 24px; font-size: 14px;">Cash flow summary</h3>
+    <pre style="background: var(--bg-1); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; line-height: 1.5;">type: entities
+title: Hepburn Finance
+entities:
+  - entity: sensor.hepburn_finance_stress_tier
+    name: Cash flow status
+  - entity: sensor.hepburn_finance_cash_today
+    name: Cash today
+  - entity: sensor.hepburn_finance_balance_30d_low
+    name: Lowest forecast (30d)
+  - entity: sensor.hepburn_finance_days_until_zero
+    name: Days until zero
+  - entity: sensor.hepburn_finance_bills_7d_total
+    name: Bills due this week
+  - entity: sensor.hepburn_finance_bills_14d_total
+    name: Bills due (14 days)</pre>
+
+    <p class="form-sub" style="margin-top: 24px;">
+      For more card variants and automation examples, see <code>HA_DASHBOARD.md</code> in the add-on repo.
+    </p>
+  </div>
+
+  <div class="form-card">
+    <h2>Available sensors</h2>
+    <table class="tx-table">
+      <thead>
+        <tr><th>Sensor</th><th>What it shows</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>sensor.hepburn_finance_cash_today</code></td><td>Spendable cash across selected accounts</td></tr>
+        <tr><td><code>sensor.hepburn_finance_balance_30d_low</code></td><td>Lowest forecast balance over next 30 days</td></tr>
+        <tr><td><code>sensor.hepburn_finance_days_until_zero</code></td><td>Days until balance hits zero (max 30)</td></tr>
+        <tr><td><code>sensor.hepburn_finance_stress_tier</code></td><td>green / amber / red status</td></tr>
+        <tr><td><code>sensor.hepburn_finance_next_bill_amount</code></td><td>Amount of next bill (with name, date, full bills list as attributes)</td></tr>
+        <tr><td><code>sensor.hepburn_finance_bills_7d_total</code></td><td>Sum of bills due in next 7 days</td></tr>
+        <tr><td><code>sensor.hepburn_finance_bills_14d_total</code></td><td>Sum of bills due in next 14 days</td></tr>
+        <tr><td><code>sensor.hepburn_finance_upcoming_bills_count</code></td><td>Count of bills in next 14 days</td></tr>
+        <tr><td><code>sensor.hepburn_finance_debt_total</code></td><td>Total debt across loans</td></tr>
+        <tr><td><code>sensor.hepburn_finance_redraw_total</code></td><td>Total mortgage redraw available</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

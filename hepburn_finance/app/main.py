@@ -104,6 +104,14 @@ def main():
                         format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
     init_db()
     seed_initial_accounts()
+
+    # Push state to HA as native sensors (no-op outside HA addon environment)
+    try:
+        from app.ha_sensors import start_periodic_push
+        start_periodic_push(interval_seconds=300)
+    except Exception as e:
+        logging.warning(f'HA sensor push thread did not start: {e}')
+
     app = create_app()
     port = int(os.environ.get('FINANCE_PORT', 8765))
     logging.info(f'Starting Hepburn Finance on port {port}')

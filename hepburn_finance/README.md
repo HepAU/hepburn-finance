@@ -143,6 +143,22 @@ This means you can:
 - Re-import the same export to recover from corruption
 - Combine exports from web vs app interfaces (assuming same description text)
 
+## Home Assistant integration
+
+The add-on pushes finance summaries to HA as native sensors every 5 minutes, so you can put cash flow status and upcoming bills directly on your HA dashboard.
+
+Sensors created (all under `sensor.hepburn_finance_*`):
+- Cash today, lowest 30-day forecast, days until zero, stress tier (green/amber/red)
+- Next bill (amount, name, date, days away, plus a full `bills_list` attribute for Lovelace markdown cards)
+- Bills due in next 7 / 14 days, total upcoming bills count
+- Total debt, total mortgage redraw available
+
+To set up the dashboard card, click **HA Card** in the add-on's topbar, or see [HA_DASHBOARD.md](./HA_DASHBOARD.md) for ready-to-paste Lovelace YAML.
+
+### Permission
+
+The add-on requires `homeassistant_api: true` to push sensor states. HA will prompt you to approve this on first install or update.
+
 ## Database
 
 SQLite at `/data/finance.db`. Persists across restarts/updates. Backed up

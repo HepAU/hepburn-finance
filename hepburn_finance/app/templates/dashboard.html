@@ -28,6 +28,7 @@
       <p>{{ today_str }} — focusing on the next 30 days</p>
     </div>
     <div class="top-actions">
+      <a class="btn" href="{{ url_for('main.ha_dashboard_help') }}" title="Set up the Home Assistant dashboard card">HA Card</a>
       <a class="btn" href="{{ url_for('main.list_transactions') }}">Transactions</a>
       <a class="btn" href="{{ url_for('main.upload') }}">Upload CSV</a>
       <a class="btn" href="{{ url_for('main.new_afterpay') }}">+ Afterpay</a>
@@ -139,10 +140,14 @@
         <a class="acc-reconcile" href="{{ url_for('main.reconcile_account_view', aid=a.id) }}" title="Reconcile manual balance vs transactions" onclick="event.stopPropagation()">⚖</a>
         <div class="acc-header-row">
           <span class="acc-type-tag {{ a.type }}">
-            {%- if a.type == 'ppor' -%}PPOR
-            {%- elif a.type == 'loan_investment' -%}INVESTMENT LOAN
-            {%- elif a.type == 'loan_personal' -%}PERSONAL LOAN
-            {%- elif a.type == 'loan_informal' -%}BORROWED
+            {%- if a.type == 'ppor' -%}Home loan
+            {%- elif a.type == 'loan_investment' -%}Investment
+            {%- elif a.type == 'loan_personal' -%}Personal loan
+            {%- elif a.type == 'loan_informal' -%}Borrowed
+            {%- elif a.type == 'loan' -%}Loan
+            {%- elif a.type == 'transaction' -%}Everyday
+            {%- elif a.type == 'savings' -%}Savings
+            {%- elif a.type == 'credit' -%}Credit card
             {%- else -%}{{ a.type }}{%- endif -%}
           </span>
         </div>
