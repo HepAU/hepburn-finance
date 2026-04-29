@@ -2,6 +2,12 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.2.1] — 2026-04-29
+
+### Fixed
+- **"None" appearing under account balances.** When the account form rendered an existing account, Jinja was outputting the literal string "None" into `value=""` attributes for empty optional fields (account_number, nickname, notes). Re-saving the form persisted those literal strings to the database, which then displayed as "None" on the account cards. Fixed the template to handle null values properly, plus a one-time cleanup migration sweeps any existing "None" strings out of the database on first start.
+- **Account type labels** for the new types now render properly: `loan_personal` → "PERSONAL LOAN", `loan_informal` → "BORROWED", `loan_investment` → "INVESTMENT LOAN", with appropriate colour tags. Previously they showed the raw type name.
+
 ## [0.2.0] — 2026-04-29
 
 The transactions release. Click any transaction to edit it, bulk-tag similar ones, internal transfers auto-detect on CSV upload, and account types now include personal/informal loans alongside the existing investment loan and PPOR.

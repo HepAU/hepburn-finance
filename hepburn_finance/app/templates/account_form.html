@@ -16,7 +16,7 @@
     <div class="form-grid-2">
       <div class="form-row">
         <label>Bank</label>
-        <input type="text" name="bank" value="{{ account.bank if account else '' }}" placeholder="e.g. Bendigo, Bankwest" required>
+        <input type="text" name="bank" value="{{ account.bank if account and account.bank else '' }}" placeholder="e.g. Bendigo, Bankwest" required>
       </div>
       <div class="form-row">
         <label>Type</label>
@@ -38,17 +38,17 @@
 
     <div class="form-row">
       <label>Name</label>
-      <input type="text" name="name" value="{{ account.name if account else '' }}" placeholder="e.g. Bankwest Easy Saver" required>
+      <input type="text" name="name" value="{{ account.name if account and account.name else '' }}" placeholder="e.g. Bankwest Easy Saver" required>
     </div>
 
     <div class="form-grid-2">
       <div class="form-row">
         <label>Account number <span class="form-hint">(optional)</span></label>
-        <input type="text" name="account_number" value="{{ account.account_number if account else '' }}" placeholder="e.g. 302-985 12345678">
+        <input type="text" name="account_number" value="{{ account.account_number if account and account.account_number else '' }}" placeholder="e.g. 302-985 12345678">
       </div>
       <div class="form-row">
         <label>Nickname <span class="form-hint">(optional)</span></label>
-        <input type="text" name="nickname" value="{{ account.nickname if account else '' }}" placeholder="e.g. Emergency fund">
+        <input type="text" name="nickname" value="{{ account.nickname if account and account.nickname else '' }}" placeholder="e.g. Emergency fund">
       </div>
     </div>
 

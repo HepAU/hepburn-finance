@@ -139,7 +139,11 @@
         <a class="acc-reconcile" href="{{ url_for('main.reconcile_account_view', aid=a.id) }}" title="Reconcile manual balance vs transactions" onclick="event.stopPropagation()">⚖</a>
         <div class="acc-header-row">
           <span class="acc-type-tag {{ a.type }}">
-            {% if a.type == 'ppor' %}PPOR{% else %}{{ a.type }}{% endif %}
+            {%- if a.type == 'ppor' -%}PPOR
+            {%- elif a.type == 'loan_investment' -%}INVESTMENT LOAN
+            {%- elif a.type == 'loan_personal' -%}PERSONAL LOAN
+            {%- elif a.type == 'loan_informal' -%}BORROWED
+            {%- else -%}{{ a.type }}{%- endif -%}
           </span>
         </div>
         <div class="acc-name">{{ a.name }}</div>
@@ -168,7 +172,7 @@
           {% endif %}
         {% endif %}
         <div class="acc-meta">
-          {% if a.account_number %}{{ a.account_number }}{% endif %}
+          {% if a.account_number and a.account_number != 'None' %}{{ a.account_number }}{% endif %}
           {% if a.type == 'credit' and a.credit_limit %} · ${{ '{:,.0f}'.format(a.credit_limit) }} limit{% endif %}
         </div>
       </div>

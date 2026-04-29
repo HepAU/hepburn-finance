@@ -360,6 +360,22 @@ def run_migrations(conn):
         # Links the two legs of a detected internal transfer to each other.
         conn.execute('ALTER TABLE transactions ADD COLUMN transfer_pair_id INTEGER')
 
+    # 0.2.1: clean up literal 'None' strings stored in text fields by old
+    # account form template (Jinja was rendering Python None as the literal
+    # string "None" which then got saved on form re-submission).
+    for table, cols in (
+        ('accounts', ['account_number', 'nickname', 'notes']),
+        ('scheduled_bills', ['category']),
+        ('scheduled_transfers', ['category', 'notes']),
+        ('transactions', ['notes']),
+    ):
+        if _table_exists(conn, table):
+            for col in cols:
+                if _column_exists(conn, table, col):
+                    conn.execute(
+                        f"UPDATE {table} SET {col}=NULL WHERE {col}='None'"
+                    )
+
 
 def init_db():
     """Create tables and seed default rules on first run."""
