@@ -274,13 +274,18 @@ def debt_attack_order():
     # PPOR
     for acc in accounts:
         if acc['type'] == 'ppor':
+            rate = acc['interest_rate']
+            if rate is None:
+                rate_str = '~6.0% *'
+            else:
+                rate_str = f'{rate:.1f}%'
             items.append({
                 'rank': rank,
                 'priority': 3,
                 'name': acc['name'],
                 'detail': 'Owner-occupier — non-deductible interest',
                 'amount': acc['balance'],
-                'rate': f'~{acc["interest_rate"] or 6:.1f}%',
+                'rate': rate_str,
                 'rate_class': 'cool',
             })
             rank += 1
@@ -288,13 +293,18 @@ def debt_attack_order():
     # Investment loans
     for acc in accounts:
         if acc['type'] == 'loan':
+            rate = acc['interest_rate']
+            if rate is None:
+                rate_str = '~6.0% *'
+            else:
+                rate_str = f'{rate:.1f}%'
             items.append({
                 'rank': rank,
                 'priority': 3,
                 'name': acc['name'],
                 'detail': 'Investment property — <strong>tax deductible interest</strong>',
                 'amount': acc['balance'],
-                'rate': f'~{acc["interest_rate"] or 6:.1f}%',
+                'rate': rate_str,
                 'rate_class': 'deductible',
             })
             rank += 1

@@ -2,6 +2,14 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.1.4] — 2026-04-29
+
+### Fixed
+- **Investment loan rate display.** Loans showed "~6.0%" even when interest rate was set to 0 or another value. The fallback (`acc.interest_rate or 6`) treated 0 as falsy. Now reads the actual rate, with a clearly-marked estimate (`~6.0% *`) only when no rate is set at all.
+
+### Added
+- **+ Afterpay shortcut button** on the dashboard topbar. Opens a quick form for total amount + first instalment date + store name, then creates four (or 2/3/5/6/8) fortnightly one-off bills in one click. Each instalment is named distinctly ("Afterpay · Cotton On (1 of 4)") so they show up individually on the calendar and fall off as they're paid.
+
 ## [0.1.3] — 2026-04-29
 
 ### The big stuff

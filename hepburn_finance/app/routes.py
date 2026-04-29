@@ -327,6 +327,65 @@ def delete_bill(bid):
     return redirect(url_for('main.dashboard'))
 
 
+# ---------- Afterpay shortcut ----------
+
+@bp.route('/afterpay/new', methods=['GET', 'POST'])
+def new_afterpay():
+    """Quick form: total amount + first instalment date + store + account.
+    Creates 4 fortnightly bills as a single fixed series.
+    Each instalment is a separate one-off bill so they show distinctly on the calendar.
+    """
+    if request.method == 'POST':
+        store = request.form['store'].strip()
+        total = float(request.form['total'])
+        first_date_str = request.form['first_date']
+        account_id = int(request.form['account_id'])
+        instalments = int(request.form.get('instalments', 4))
+
+        first_date, err = _validate_future_date(first_date_str)
+        if err:
+            return err, 400
+
+        per_instalment = round(total / instalments, 2)
+        # Adjust last instalment so the rounded sum matches the total exactly
+        last_instalment = round(total - per_instalment * (instalments - 1), 2)
+
+        from datetime import timedelta as _td
+        with get_db() as conn:
+            for i in range(instalments):
+                instal_date = first_date + _td(days=14 * i)
+                amt = per_instalment if i < instalments - 1 else last_instalment
+                conn.execute(
+                    'INSERT INTO scheduled_bills (name, amount, next_date, recurring, '
+                    'category, account_id, is_income) '
+                    'VALUES (?,?,?,?,?,?,?)',
+                    (
+                        f'Afterpay · {store} ({i+1} of {instalments})',
+                        -abs(amt),
+                        instal_date.isoformat(),
+                        'once',
+                        'Buy Now Pay Later · Afterpay',
+                        account_id,
+                        0,
+                    )
+                )
+        return redirect(url_for('main.dashboard'))
+
+    with get_db() as conn:
+        accounts = conn.execute(
+            "SELECT id, name, bank FROM accounts WHERE archived=0 ORDER BY bank, name"
+        ).fetchall()
+    return render_template(
+        'afterpay_form.html',
+        accounts=accounts,
+        today_iso=date.today().isoformat(),
+    )
+
+
+
+
+
+
 # ---------- Transfers ----------
 
 @bp.route('/transfers/new', methods=['GET', 'POST'])

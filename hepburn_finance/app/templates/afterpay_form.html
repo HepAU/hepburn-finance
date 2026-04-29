@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>+ Afterpay</h1>
+      <p>Quick-add an Afterpay purchase. Creates four (or however many) fortnightly instalments in one go.</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('main.dashboard') }}">← Back to dashboard</a>
+  </div>
+
+  <form class="form-card" method="POST">
+    <h2>New Afterpay purchase</h2>
+    <p class="form-sub">Punch in the details from the Afterpay confirmation screen — total, first instalment date, where you bought from. Each instalment becomes its own dated bill so the calendar shows them distinctly.</p>
+
+    <div class="form-row">
+      <label>Store / what was bought</label>
+      <input type="text" name="store" placeholder="e.g. Cotton On, The Iconic, Big W" required>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Total amount ($)</label>
+        <input type="number" name="total" step="0.01" min="0" placeholder="e.g. 240.00" required>
+      </div>
+      <div class="form-row">
+        <label>Number of instalments</label>
+        <select name="instalments">
+          <option value="4" selected>4 (standard)</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="8">8</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label>First instalment date</label>
+      <input type="date" name="first_date" min="{{ today_iso }}" value="{{ today_iso }}" required>
+    </div>
+
+    <div class="form-row">
+      <label>From account</label>
+      <select name="account_id" required>
+        {% for a in accounts %}
+        <option value="{{ a.id }}">{{ a.bank }} — {{ a.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-card" style="background: var(--bg-1); margin: 16px 0; padding: 12px 14px;">
+      <p style="font-size: 12px; color: var(--text-3); margin: 0;">
+        <strong style="color: var(--text-2);">What happens:</strong> Four (or N) one-off bills get created at fortnightly intervals starting from your first instalment date, each named "Afterpay · [store] (1 of 4)" through "(4 of 4)". Each one shows up individually on the calendar and falls off after it's been paid. Edit or delete any of them later from the bill list.
+      </p>
+    </div>
+
+    <div class="form-actions">
+      <div></div>
+      <div class="form-actions-right">
+        <a class="btn ghost" href="{{ url_for('main.dashboard') }}">Cancel</a>
+        <button type="submit" class="btn primary">Create instalments</button>
+      </div>
+    </div>
+  </form>
+</div>
+{% endblock %}
