@@ -658,6 +658,160 @@ def list_transactions():
     )
 
 
+# ---------- Interest-free plan management ----------
+
+@bp.route('/plans')
+def list_plans():
+    """List all interest-free plans across credit accounts."""
+    with get_db() as conn:
+        plans = conn.execute(
+            "SELECT p.*, a.name AS account_name, a.bank "
+            "FROM interest_free_plans p "
+            "JOIN accounts a ON p.account_id = a.id "
+            "ORDER BY p.expiry_date ASC"
+        ).fetchall()
+    return render_template('plans.html', plans=[dict(p) for p in plans])
+
+
+@bp.route('/plans/new', methods=['GET', 'POST'])
+def new_plan():
+    if request.method == 'POST':
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO interest_free_plans (account_id, name, detail, "
+                "starting_balance, current_balance, monthly_payment, expiry_date, expired_rate) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    int(request.form['account_id']),
+                    request.form.get('name', '').strip(),
+                    request.form.get('detail', '').strip() or None,
+                    float(request.form.get('starting_balance') or 0),
+                    float(request.form.get('current_balance') or 0),
+                    float(request.form.get('monthly_payment')) if request.form.get('monthly_payment') else None,
+                    request.form.get('expiry_date', '').strip(),
+                    float(request.form.get('expired_rate') or 29.99),
+                ),
+            )
+        return redirect(url_for('main.list_plans'))
+
+    with get_db() as conn:
+        # Plans only attach to credit-card accounts
+        accounts = conn.execute(
+            "SELECT id, name, bank FROM accounts WHERE archived=0 AND type='credit' "
+            "ORDER BY bank, name"
+        ).fetchall()
+    return render_template(
+        'plan_form.html',
+        plan=None,
+        accounts=[dict(a) for a in accounts],
+    )
+
+
+@bp.route('/plans/<int:pid>/edit', methods=['GET', 'POST'])
+def edit_plan(pid):
+    with get_db() as conn:
+        plan = conn.execute(
+            'SELECT * FROM interest_free_plans WHERE id=?', (pid,)
+        ).fetchone()
+        if not plan:
+            return 'Not found', 404
+
+        if request.method == 'POST':
+            conn.execute(
+                "UPDATE interest_free_plans SET name=?, detail=?, "
+                "starting_balance=?, current_balance=?, monthly_payment=?, "
+                "expiry_date=?, expired_rate=? WHERE id=?",
+                (
+                    request.form.get('name', '').strip(),
+                    request.form.get('detail', '').strip() or None,
+                    float(request.form.get('starting_balance') or 0),
+                    float(request.form.get('current_balance') or 0),
+                    float(request.form.get('monthly_payment')) if request.form.get('monthly_payment') else None,
+                    request.form.get('expiry_date', '').strip(),
+                    float(request.form.get('expired_rate') or 29.99),
+                    pid,
+                ),
+            )
+            return redirect(url_for('main.list_plans'))
+
+        accounts = conn.execute(
+            "SELECT id, name, bank FROM accounts WHERE archived=0 AND type='credit' "
+            "ORDER BY bank, name"
+        ).fetchall()
+    return render_template(
+        'plan_form.html',
+        plan=dict(plan),
+        accounts=[dict(a) for a in accounts],
+    )
+
+
+@bp.route('/plans/<int:pid>/delete', methods=['POST'])
+def delete_plan(pid):
+    with get_db() as conn:
+        conn.execute('DELETE FROM interest_free_plans WHERE id=?', (pid,))
+    return redirect(url_for('main.list_plans'))
+
+
+@bp.route('/transactions/new', methods=['GET', 'POST'])
+def new_transaction():
+    """Manually add a single transaction.
+
+    Useful for accounts where CSV import isn't available (e.g. Latitude
+    Gem Visa, which only provides on-screen statements). The transaction is
+    fingerprinted and treated like any imported one — it'll affect the
+    computed balance of the account it's posted to.
+    """
+    if request.method == 'POST':
+        try:
+            account_id = int(request.form['account_id'])
+            tx_date = request.form.get('date', '').strip() or date.today().isoformat()
+            amount = float(request.form['amount'])
+            sign = request.form.get('sign', 'debit')
+            if sign == 'debit' and amount > 0:
+                amount = -amount
+            elif sign == 'credit' and amount < 0:
+                amount = abs(amount)
+            description = request.form.get('description', '').strip() or 'Manual entry'
+            category = request.form.get('category', '').strip() or None
+            notes = request.form.get('notes', '').strip() or None
+        except (ValueError, KeyError) as e:
+            return f'Invalid form data: {e}', 400
+
+        # Fingerprint identical to importer to allow dedup against future CSV imports
+        import hashlib
+        fp_input = f'{account_id}|{tx_date}|{amount}|{description}|manual'
+        fingerprint = hashlib.sha256(fp_input.encode()).hexdigest()
+
+        with get_db() as conn:
+            try:
+                conn.execute(
+                    "INSERT INTO transactions (account_id, date, amount, description, "
+                    "raw_description, category, notes, fingerprint, user_categorised, "
+                    "is_internal_transfer) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (account_id, tx_date, amount, description, description, category,
+                     notes, fingerprint, 1 if category else 0, 0)
+                )
+            except Exception as e:
+                return f'Could not save: {e}', 400
+
+        return redirect(url_for('main.list_transactions'))
+
+    # GET — render the form
+    with get_db() as conn:
+        accounts = conn.execute(
+            "SELECT id, name, type, bank FROM accounts WHERE archived=0 "
+            "ORDER BY bank, type, name"
+        ).fetchall()
+    return render_template(
+        'transaction_form.html',
+        tx=None,
+        accounts=[dict(a) for a in accounts],
+        categories=_all_categories(),
+        similar=[],
+        today=date.today().isoformat(),
+    )
+
+
 @bp.route('/transactions/<int:tid>/edit', methods=['GET', 'POST'])
 def edit_transaction(tid):
     with get_db() as conn:
@@ -1060,7 +1214,17 @@ SEED_PLAN_NAMES = {
 
 
 def _detect_seed_data():
-    """Return a dict describing seed data still present in the DB."""
+    """Return a dict describing seed data still present in the DB.
+
+    Once the user has run the cleanup tool, we set seed_cleanup_completed
+    to '1' in settings. After that, has_any will always return False so
+    the banner stays hidden — even if the user chose to keep some seeded
+    accounts (rename them to use them as real accounts, etc.). They can
+    still revisit /admin/cleanup directly.
+    """
+    if get_setting('seed_cleanup_completed') == '1':
+        return {'accounts': [], 'plans': [], 'has_any': False, 'cleanup_completed': True}
+
     with get_db() as conn:
         if not SEED_ACCOUNT_NAMES:
             accounts = []
@@ -1141,6 +1305,11 @@ def admin_cleanup():
                     conn.execute('DELETE FROM interest_free_plans WHERE id=?', (p['id'],))
                     removed_plans.append(p['name'])
 
+        # Mark cleanup as completed — banner will no longer show, even if the
+        # user chose "Leave alone" for some items. They can still visit
+        # /admin/cleanup directly to manage seed data later.
+        set_setting('seed_cleanup_completed', '1')
+
         return render_template(
             'admin_cleanup_done.html',
             removed_accounts=removed_accounts,
@@ -1148,7 +1317,45 @@ def admin_cleanup():
             removed_plans=removed_plans,
         )
 
-    seed = _detect_seed_data()
+    # GET — show the cleanup form
+    # If the user already completed cleanup, show empty state unless ?force=1
+    force = request.args.get('force') == '1'
+    if get_setting('seed_cleanup_completed') == '1' and not force:
+        # Force-detect (bypass the flag) so user can see what's still around
+        seed = {'accounts': [], 'plans': [], 'has_any': False, 'cleanup_completed': True}
+    else:
+        # Bypass the flag for this view
+        with get_db() as conn:
+            accounts = conn.execute(
+                "SELECT id, name, bank, type, balance, opening_balance "
+                "FROM accounts WHERE name IN ({}) AND archived=0".format(
+                    ','.join('?' * len(SEED_ACCOUNT_NAMES))
+                ),
+                tuple(SEED_ACCOUNT_NAMES)
+            ).fetchall() if SEED_ACCOUNT_NAMES else []
+
+            plans = conn.execute(
+                "SELECT id, name, current_balance, expiry_date "
+                "FROM interest_free_plans WHERE name IN ({})".format(
+                    ','.join('?' * len(SEED_PLAN_NAMES))
+                ),
+                tuple(SEED_PLAN_NAMES)
+            ).fetchall() if SEED_PLAN_NAMES else []
+
+            tx_counts = {}
+            for a in accounts:
+                cnt = conn.execute(
+                    'SELECT COUNT(*) FROM transactions WHERE account_id=?',
+                    (a['id'],)
+                ).fetchone()[0]
+                tx_counts[a['id']] = cnt
+
+        seed = {
+            'accounts': [dict(a, tx_count=tx_counts.get(a['id'], 0)) for a in accounts],
+            'plans': [dict(p) for p in plans],
+            'has_any': len(accounts) > 0 or len(plans) > 0,
+            'cleanup_completed': get_setting('seed_cleanup_completed') == '1',
+        }
     return render_template('admin_cleanup.html', seed=seed)
 
 

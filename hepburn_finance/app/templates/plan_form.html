@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>{% if plan %}Edit plan{% else %}New interest-free plan{% endif %}</h1>
+      <p>Track plans that roll onto a high rate at expiry — Latitude Gem Visa, GO Mastercard, etc.</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('main.list_plans') }}">← All plans</a>
+  </div>
+
+  {% if not plan and not accounts %}
+  <div class="form-card">
+    <h2 style="margin-top: 0;">No credit accounts</h2>
+    <p>You need at least one account with type "Credit card" before you can add an interest-free plan.</p>
+    <p style="margin-top: 16px;">
+      <a class="btn primary" href="{{ url_for('main.new_account') }}">+ Add credit account</a>
+    </p>
+  </div>
+  {% else %}
+  <form class="form-card" method="POST">
+    <h2>{% if plan %}{{ plan.name }}{% else %}New plan{% endif %}</h2>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Name</label>
+        <input type="text" name="name" value="{{ plan.name if plan else '' }}"
+          placeholder="e.g. Pandora purchase, Harvey Norman TV" required>
+      </div>
+      <div class="form-row">
+        <label>Account</label>
+        {% if plan %}
+        <input type="text" value="{{ plan.account_id }}" disabled style="opacity: 0.6;">
+        <p class="form-hint" style="margin-top: 4px;">Can't move a plan to a different account.</p>
+        {% else %}
+        <select name="account_id" required>
+          <option value="" disabled selected>Choose an account…</option>
+          {% for a in accounts %}
+          <option value="{{ a.id }}">{{ a.bank }} · {{ a.name }}</option>
+          {% endfor %}
+        </select>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label>Detail <span class="form-hint">(optional)</span></label>
+      <input type="text" name="detail" value="{{ plan.detail if plan and plan.detail else '' }}"
+        placeholder="e.g. Started 28 Oct, $86.12/mo, 33-month term">
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Starting balance ($)</label>
+        <input type="number" name="starting_balance" step="0.01"
+          value="{{ plan.starting_balance if plan else '' }}" placeholder="e.g. 559.17">
+        <p class="form-hint" style="margin-top: 4px;">What you originally borrowed.</p>
+      </div>
+      <div class="form-row">
+        <label>Current outstanding ($)</label>
+        <input type="number" name="current_balance" step="0.01"
+          value="{{ plan.current_balance if plan else '' }}" placeholder="e.g. 559.17" required>
+        <p class="form-hint" style="margin-top: 4px;">What's left to pay before expiry.</p>
+      </div>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Monthly payment <span class="form-hint">(optional)</span></label>
+        <input type="number" name="monthly_payment" step="0.01"
+          value="{{ plan.monthly_payment if plan and plan.monthly_payment is not none else '' }}"
+          placeholder="e.g. 86.12">
+        <p class="form-hint" style="margin-top: 4px;">If the plan has a fixed monthly minimum.</p>
+      </div>
+      <div class="form-row">
+        <label>Expiry date</label>
+        <input type="date" name="expiry_date" value="{{ plan.expiry_date if plan else '' }}" required>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label>Expired plan rate (%)</label>
+      <input type="number" name="expired_rate" step="0.01"
+        value="{{ plan.expired_rate if plan else '29.99' }}" required>
+      <p class="form-hint" style="margin-top: 4px;">The interest rate that kicks in if the balance isn't cleared by the expiry date. Latitude is typically 29.99%.</p>
+    </div>
+
+    <div class="form-actions">
+      <div>
+        {% if plan %}
+        <form method="POST" action="{{ url_for('main.delete_plan', pid=plan.id) }}" style="display:inline;"
+          onsubmit="return confirm('Delete this plan permanently?');">
+          <button type="submit" class="btn danger">Delete</button>
+        </form>
+        {% endif %}
+      </div>
+      <div class="form-actions-right">
+        <a class="btn ghost" href="{{ url_for('main.list_plans') }}">Cancel</a>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

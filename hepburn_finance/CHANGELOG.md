@@ -2,6 +2,24 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.5.2] — 2026-04-30
+
+The clarity release. The dashboard header now tells one story instead of three competing ones, manual transactions are supported for non-CSV creditors, interest-free plans have a proper management UI, and the demo-data banner remembers when you've reviewed it.
+
+### Changed
+- **Dashboard header redesigned.** The "Cash Flow / Days Until Zero / Bills Coverage" three-stat grid was replaced with a single narrative + three plain-dollar supporting figures (Lowest in 30 days, Today's cash, 30-day bills due). The wording adapts to the tier: green ("Cash flow steady"), amber ("Tight period coming — you'll dip to $X on date Y, then recover"), red ("Likely shortfall — action needed today"). Removes the abstract "Bills Coverage 200%" metric that read more like a bank report than a kitchen-table summary.
+
+### Added
+- **+ Transaction button.** Manually add a single transaction to any account — useful for credit cards or accounts where CSV import isn't available (e.g. Latitude Gem Visa). The form has separate "Money out" / "Money in" controls so you don't have to remember which sign to use. Saved transactions are fingerprinted identically to imported ones, so they dedup correctly against future CSV uploads.
+- **Interest-free plan management UI** at `/plans`. Add, edit, and delete plans through the dashboard rather than direct DB access. The list view shows current outstanding, monthly payment, expiry, and expired-plan rate. The dashboard's plan section now includes "Manage →" and "+ Add another plan" links. Empty state encourages adding one if there are credit accounts but no plans tracked yet.
+- **Plan items on the dashboard are now clickable** — tap any active plan to edit it.
+
+### Fixed
+- **Demo data banner persistence.** Once you submit the cleanup form, a `seed_cleanup_completed=1` flag is set and the banner stays hidden — even if you chose "Leave alone" for some seed-named accounts (e.g. you renamed them and want to keep using them as real accounts). Visit `/admin/cleanup?force=1` to re-show seed-named items if needed.
+
+### Migration
+No schema changes. All v0.5.x databases are forward-compatible.
+
 ## [0.5.1] — 2026-04-30
 
 The "make this safe to share" release. Removes all demo seed data from new installs and provides a one-shot cleanup tool for existing users to remove what was seeded earlier.

@@ -3,21 +3,49 @@
 <div class="container">
   <div class="topbar">
     <div>
-      <h1>Edit transaction</h1>
-      <p>{{ tx.account_name }} · {{ tx.date }}</p>
+      <h1>{% if tx %}Edit transaction{% else %}Add transaction{% endif %}</h1>
+      <p>
+        {% if tx %}{{ tx.account_name }} · {{ tx.date }}
+        {% else %}Manually record a transaction. Useful for accounts without CSV exports.{% endif %}
+      </p>
     </div>
     <a class="btn ghost" href="{{ url_for('main.list_transactions') }}">← All transactions</a>
   </div>
 
   <form class="form-card" method="POST">
+    {% if tx %}
     <h2>{{ tx.description }}</h2>
     <p class="form-sub">Original raw text: <code>{{ tx.raw_description or tx.description }}</code></p>
+    {% else %}
+    <h2>New transaction</h2>
+    <p class="form-sub">For credit cards or accounts where you can't import a CSV (e.g. Latitude Gem Visa). Once saved, this transaction affects the account's computed balance like any other.</p>
+    {% endif %}
+
+    {% if not tx %}
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Account</label>
+        <select name="account_id" required>
+          <option value="" disabled selected>Choose an account…</option>
+          {% for a in accounts %}
+          <option value="{{ a.id }}">{{ a.bank }} · {{ a.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Date</label>
+        <input type="date" name="date" value="{{ today }}" required>
+      </div>
+    </div>
+    {% endif %}
 
     <div class="form-row">
       <label>Description</label>
-      <input type="text" name="description" value="{{ tx.description }}" required>
+      <input type="text" name="description" value="{{ tx.description if tx else '' }}"
+        placeholder="{% if not tx %}e.g. Coles, Pandora payment, Power bill{% endif %}" required>
     </div>
 
+    {% if tx %}
     <div class="form-grid-2">
       <div class="form-row">
         <label>Amount ($)</label>
@@ -30,10 +58,28 @@
         <label for="is_internal_transfer">Internal transfer (between own accounts)</label>
       </div>
     </div>
+    {% else %}
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Amount ($)</label>
+        <input type="number" name="amount" step="0.01" min="0" placeholder="0.00" required>
+        <p class="form-hint" style="margin-top: 4px;">Just the dollar amount, no minus sign needed.</p>
+      </div>
+      <div class="form-row">
+        <label>Type</label>
+        <select name="sign">
+          <option value="debit" selected>Money out (debit / spend)</option>
+          <option value="credit">Money in (credit / refund)</option>
+        </select>
+      </div>
+    </div>
+    {% endif %}
 
     <div class="form-row">
       <label>Category <span class="form-hint">(autocomplete)</span></label>
-      <input type="text" name="category" list="category-list" value="{{ tx.category if tx.category and tx.category != 'Uncategorised' else '' }}" placeholder="e.g. Groceries, Subscriptions · Streaming">
+      <input type="text" name="category" list="category-list"
+        value="{% if tx and tx.category and tx.category != 'Uncategorised' %}{{ tx.category }}{% endif %}"
+        placeholder="e.g. Groceries, Subscriptions · Streaming">
       <datalist id="category-list">
         {% for c in categories %}<option value="{{ c }}">{% endfor %}
       </datalist>
@@ -41,7 +87,7 @@
 
     <div class="form-row">
       <label>Notes <span class="form-hint">(optional)</span></label>
-      <textarea name="notes" rows="2" placeholder="Anything to remember about this transaction">{{ tx.notes or '' }}</textarea>
+      <textarea name="notes" rows="2" placeholder="Anything to remember">{{ tx.notes if tx and tx.notes else '' }}</textarea>
     </div>
 
     {% if similar %}
@@ -64,9 +110,12 @@
 
     <div class="form-actions">
       <div>
-        <form method="POST" action="{{ url_for('main.delete_transaction', tid=tx.id) }}" style="display:inline;" onsubmit="return confirm('Delete this transaction permanently? This cannot be undone.');">
+        {% if tx %}
+        <form method="POST" action="{{ url_for('main.delete_transaction', tid=tx.id) }}" style="display:inline;"
+          onsubmit="return confirm('Delete this transaction permanently?');">
           <button type="submit" class="btn danger">Delete</button>
         </form>
+        {% endif %}
       </div>
       <div class="form-actions-right">
         <a class="btn ghost" href="{{ url_for('main.list_transactions') }}">Cancel</a>

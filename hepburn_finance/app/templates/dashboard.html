@@ -31,6 +31,7 @@
       <a class="btn" href="{{ url_for('main.ha_dashboard_help') }}" title="Set up the Home Assistant dashboard card">HA Card</a>
       <a class="btn" href="{{ url_for('main.list_transactions') }}">Transactions</a>
       <a class="btn" href="{{ url_for('main.upload') }}">Upload CSV</a>
+      <a class="btn" href="{{ url_for('main.new_transaction') }}">+ Transaction</a>
       <a class="btn" href="{{ url_for('main.new_afterpay') }}">+ Afterpay</a>
       <a class="btn" href="{{ url_for('main.new_transfer') }}">+ Transfer</a>
       <a class="btn primary" href="{{ url_for('main.new_bill') }}">+ Add bill</a>
@@ -56,36 +57,49 @@
 
   <!-- Stress meter -->
   <div class="stress-card tier-{{ stress.tier }}">
-    <div class="stress-grid">
-      <div class="stress-status">
-        <div class="stress-icon">
-          {% if stress.tier == 'green' %}✓{% elif stress.tier == 'amber' %}⚠{% else %}✕{% endif %}
+    {# Headline + supporting figures, rebuilt for plain-language clarity. #}
+    <div class="stress-headline">
+      <div class="stress-icon">
+        {% if stress.tier == 'green' %}✓{% elif stress.tier == 'amber' %}⚠{% else %}✕{% endif %}
+      </div>
+      <div class="stress-text">
+        <div class="stress-label">Cash flow · Next 30 days</div>
+        <div class="stress-tier">
+          {% if stress.tier == 'green' %}Cash flow steady
+          {% elif stress.tier == 'amber' %}Tight period coming
+          {% else %}Likely shortfall
+          {% endif %}
         </div>
-        <div>
-          <div class="stress-label">Cash Flow · Next 30 days</div>
-          <div class="stress-tier">
-            {% if stress.tier == 'green' %}Safe 30 days
-            {% elif stress.tier == 'amber' %}Tight but workable
-            {% else %}Likely shortfall
-            {% endif %}
-          </div>
-          <div class="stress-msg">{{ stress.message }}</div>
+        <div class="stress-msg">
+          {% if stress.tier == 'green' %}
+            Forecast holds positive across the next 30 days. ${{ '{:,.0f}'.format(stress.starting_balance) }} today, lowest dip is ${{ '{:,.0f}'.format(stress.lowest) }}.
+          {% elif stress.tier == 'amber' %}
+            You'll dip to <strong>${{ '{:,.0f}'.format(stress.lowest) }}</strong> on {{ stress.lowest_date }}, then recover. Plan a top-up before then.
+          {% else %}
+            Forecast goes negative — <strong>${{ '{:,.0f}'.format(stress.lowest) }}</strong> on {{ stress.lowest_date }}. Action needed today.
+          {% endif %}
         </div>
       </div>
-      <div class="stress-stat">
-        <div class="label">Days Until Zero</div>
-        <div class="value{% if stress.dtz is none %} good{% elif stress.dtz < 7 %} danger{% elif stress.dtz < 14 %} warn{% endif %}">
-          {% if stress.dtz is none %}30+{% else %}{{ stress.dtz }}d{% endif %}
+    </div>
+    <div class="stress-figures">
+      <div class="stress-fig">
+        <div class="label">Lowest in 30 days</div>
+        <div class="value{% if stress.lowest < 0 %} danger{% elif stress.lowest < 200 %} warn{% endif %}">
+          {%- if stress.lowest < 0 -%}-${{ '{:,.0f}'.format(stress.lowest|abs) }}{%- else -%}${{ '{:,.0f}'.format(stress.lowest) }}{%- endif -%}
         </div>
-        <div class="sub">If no income lands sooner</div>
+        <div class="sub">{% if stress.lowest_date and stress.lowest_date != today %}{{ stress.lowest_date }}{% else %}today{% endif %}</div>
       </div>
-      <div class="stress-stat">
-        <div class="label">Bills Coverage</div>
-        <div class="value{% if stress.coverage >= 100 %} good{% elif stress.coverage >= 80 %} warn{% else %} danger{% endif %}">
-          {{ stress.coverage }}%
+      <div class="stress-fig">
+        <div class="label">Today's cash</div>
+        <div class="value{% if stress.starting_balance < 200 %} warn{% endif %}{% if stress.starting_balance < 0 %} danger{% endif %}">
+          {%- if stress.starting_balance < 0 -%}-${{ '{:,.0f}'.format(stress.starting_balance|abs) }}{%- else -%}${{ '{:,.0f}'.format(stress.starting_balance) }}{%- endif -%}
         </div>
-        <div class="sub">Cash + 30d income / 30d bills</div>
-        <div class="stress-bar"><div class="stress-bar-fill" style="width: {{ [stress.coverage, 100]|min }}%;"></div></div>
+        <div class="sub">across selected accounts</div>
+      </div>
+      <div class="stress-fig">
+        <div class="label">30-day bills due</div>
+        <div class="value">${{ '{:,.0f}'.format(stress.total_out) }}</div>
+        <div class="sub">+ ${{ '{:,.0f}'.format(stress.total_in) }} income expected</div>
       </div>
     </div>
   </div>
@@ -376,21 +390,38 @@
         </div>
         {% endif %}
         {% if plans %}
-        <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text-2);">Active interest-free plans</div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom:10px;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-2);">Active interest-free plans</div>
+          <a href="{{ url_for('main.list_plans') }}" style="font-size:11px;color:var(--text-3);text-decoration:none;">Manage →</a>
+        </div>
         <ul class="plan-list">
           {% for p in plans %}
           <li class="plan-item">
-            <div>
-              <div class="plan-name">{{ p.name }}</div>
-              <div class="plan-detail">{{ p.detail or '' }}</div>
-            </div>
-            <div>
-              <div class="plan-amount">${{ '%.2f'|format(p.current_balance) }}</div>
-              <div class="plan-expiry">Exp {{ p.expiry_date }}</div>
-            </div>
+            <a href="{{ url_for('main.edit_plan', pid=p.id) }}" style="display: contents; text-decoration: none; color: inherit;">
+              <div>
+                <div class="plan-name">{{ p.name }}</div>
+                <div class="plan-detail">{{ p.detail or '' }}</div>
+              </div>
+              <div>
+                <div class="plan-amount">${{ '%.2f'|format(p.current_balance) }}</div>
+                <div class="plan-expiry">Exp {{ p.expiry_date }}</div>
+              </div>
+            </a>
           </li>
           {% endfor %}
         </ul>
+        <div style="text-align: center; margin-top: 10px;">
+          <a href="{{ url_for('main.new_plan') }}" style="font-size:12px;color:var(--text-3);text-decoration:none;">+ Add another plan</a>
+        </div>
+        {% else %}
+        {# Show "Add a plan" prompt if there are credit accounts but no plans #}
+        {% set has_credit = false %}
+        {% for accs in accounts_by_bank.values() %}{% for a in accs %}{% if a.type == 'credit' %}{% set has_credit = true %}{% endif %}{% endfor %}{% endfor %}
+        {% if has_credit %}
+        <div style="text-align: center; padding: 12px; background: var(--bg-1); border-radius: 6px; font-size: 12px; color: var(--text-3); margin-top: 10px;">
+          No interest-free plans tracked. <a href="{{ url_for('main.new_plan') }}" style="color: var(--amber); text-decoration: none; font-weight: 600;">+ Add one</a>
+        </div>
+        {% endif %}
         {% endif %}
       </div>
     </div>

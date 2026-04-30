@@ -100,16 +100,18 @@ a:hover { text-decoration: underline; }
 .stress-card.tier-amber::before { background: linear-gradient(90deg, transparent, var(--amber), transparent); }
 .stress-card.tier-red::before   { background: linear-gradient(90deg, transparent, var(--red), transparent); }
 
-.stress-grid {
-  display: grid; grid-template-columns: 1.4fr 1fr 1fr;
-  gap: 32px; align-items: center;
+/* New stress card layout: headline message on top, three supporting figures below */
+.stress-headline {
+  display: flex; align-items: flex-start; gap: 16px;
+  padding-bottom: 18px; margin-bottom: 18px;
+  border-bottom: 1px solid var(--line);
 }
-.stress-status { display: flex; align-items: center; gap: 16px; }
+.stress-text { flex: 1; min-width: 0; }
 .stress-icon {
-  width: 56px; height: 56px;
-  border-radius: 14px;
+  width: 48px; height: 48px;
+  border-radius: 12px;
   display: grid; place-items: center;
-  flex-shrink: 0; font-size: 24px;
+  flex-shrink: 0; font-size: 22px;
 }
 .tier-green .stress-icon { background: var(--green-bg); }
 .tier-amber .stress-icon { background: var(--amber-bg); }
@@ -119,35 +121,39 @@ a:hover { text-decoration: underline; }
   color: var(--text-3); font-weight: 500; margin-bottom: 4px;
 }
 .stress-tier {
-  font-size: 26px; font-weight: 600;
-  letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 4px;
+  font-size: 22px; font-weight: 600;
+  letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 6px;
 }
 .tier-green .stress-tier { color: var(--green); }
 .tier-amber .stress-tier { color: var(--amber); }
 .tier-red .stress-tier   { color: var(--red); }
-.stress-msg { font-size: 13px; color: var(--text-2); line-height: 1.4; }
-.stress-stat .label {
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+.stress-msg {
+  font-size: 14px; color: var(--text-2); line-height: 1.5;
+  max-width: 60ch;
+}
+.stress-msg strong { color: var(--text-1); font-weight: 600; }
+
+.stress-figures {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 28px; align-items: start;
+}
+.stress-fig .label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--text-3); font-weight: 500; margin-bottom: 6px;
 }
-.stress-stat .value {
-  font-size: 28px; font-weight: 600;
+.stress-fig .value {
+  font-size: 26px; font-weight: 500;
   letter-spacing: -0.02em; line-height: 1; margin-bottom: 4px;
   font-feature-settings: 'tnum';
 }
-.stress-stat .value.warn { color: var(--amber); }
-.stress-stat .value.danger { color: var(--red); }
-.stress-stat .value.good { color: var(--green); }
-.stress-stat .sub { font-size: 12px; color: var(--text-3); }
-.stress-stat .sub strong { color: var(--text-2); font-weight: 500; }
-.stress-bar {
-  height: 6px; background: var(--bg-3);
-  border-radius: 3px; margin-top: 6px; overflow: hidden;
+.stress-fig .value.warn { color: var(--amber); }
+.stress-fig .value.danger { color: var(--red); }
+.stress-fig .sub { font-size: 11px; color: var(--text-3); }
+
+@media (max-width: 720px) {
+  .stress-figures { grid-template-columns: 1fr; gap: 14px; }
+  .stress-fig { padding: 6px 0; }
 }
-.stress-bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
-.tier-green .stress-bar-fill { background: var(--green); }
-.tier-amber .stress-bar-fill { background: var(--amber); }
-.tier-red .stress-bar-fill   { background: var(--red); }
 
 /* Assistant */
 .assist-row {
