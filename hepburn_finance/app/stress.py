@@ -60,13 +60,21 @@ def compute_stress(account_ids, today=None):
     else:
         coverage = 200  # nothing going out — effectively unlimited
 
+    # Format the lowest_date in Australian readable form (e.g. "Sat 30 May")
+    # for both the message and any consumer that wants the friendly version.
+    try:
+        lowest_dt = date.fromisoformat(lowest_date)
+        lowest_date_au = lowest_dt.strftime('%a %d %b')
+    except (ValueError, TypeError):
+        lowest_date_au = lowest_date
+
     # Tier
     if lowest < RED_FLOOR:
         tier = 'red'
-        msg = f'Forecast goes negative — ${lowest:,.0f} on {lowest_date}. Action needed.'
+        msg = f'Forecast goes negative — ${lowest:,.0f} on {lowest_date_au}. Action needed.'
     elif lowest < AMBER_FLOOR or coverage < COVERAGE_AMBER:
         tier = 'amber'
-        msg = f'Forecast dips to ${lowest:,.0f} on {lowest_date}. Plan a top-up before then.'
+        msg = f'Forecast dips to ${lowest:,.0f} on {lowest_date_au}. Plan a top-up before then.'
     else:
         tier = 'green'
         msg = 'Forecast holds positive across the next 30 days.'
@@ -78,6 +86,7 @@ def compute_stress(account_ids, today=None):
         'coverage': min(200, coverage),
         'lowest': round(lowest, 2),
         'lowest_date': lowest_date,
+        'lowest_date_au': lowest_date_au,
         'starting_balance': round(starting, 2),
         'total_in': round(total_in, 2),
         'total_out': round(total_out, 2),

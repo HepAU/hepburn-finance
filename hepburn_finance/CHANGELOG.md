@@ -2,6 +2,16 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.5.3] — 2026-04-30
+
+Polish release for the HA popup and dashboard. Three small but meaningful fixes.
+
+### Fixed
+- **Australian date format everywhere.** Stress messages now read "Forecast goes negative — $-1,142 on Sat 30 May" instead of an ISO date. The lowest-balance figure under "Lowest in 30 days" reads "Sat 30 May". Both server-rendered and pushed to HA.
+- **HA popup running balance carries across sections.** The "Balance after Today" figure now correctly factors into the "Balance after This week" calculation, instead of resetting to today's cash for each section. Means if Tomorrow leaves you in the red, This week's row reflects that running shortfall instead of pretending you started fresh.
+- **HA popup section labels include their date range.** No more guessing what "This week" means: it now reads "THIS WEEK · Sat 2 — Sun 4 May" so you know exactly which days are bucketed in there. Today and Tomorrow show the specific date.
+- **HA popup "Open Finance dashboard" button centred.** Was left-aligned before, now sits in the middle of the footer.
+
 ## [0.5.2] — 2026-04-30
 
 The clarity release. The dashboard header now tells one story instead of three competing ones, manual transactions are supported for non-CSV creditors, interest-free plans have a proper management UI, and the demo-data banner remembers when you've reviewed it.

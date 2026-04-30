@@ -74,9 +74,9 @@
           {% if stress.tier == 'green' %}
             Forecast holds positive across the next 30 days. ${{ '{:,.0f}'.format(stress.starting_balance) }} today, lowest dip is ${{ '{:,.0f}'.format(stress.lowest) }}.
           {% elif stress.tier == 'amber' %}
-            You'll dip to <strong>${{ '{:,.0f}'.format(stress.lowest) }}</strong> on {{ stress.lowest_date }}, then recover. Plan a top-up before then.
+            You'll dip to <strong>${{ '{:,.0f}'.format(stress.lowest) }}</strong> on {{ stress.lowest_date_au or stress.lowest_date }}, then recover. Plan a top-up before then.
           {% else %}
-            Forecast goes negative — <strong>${{ '{:,.0f}'.format(stress.lowest) }}</strong> on {{ stress.lowest_date }}. Action needed today.
+            Forecast goes negative — <strong>${{ '{:,.0f}'.format(stress.lowest) }}</strong> on {{ stress.lowest_date_au or stress.lowest_date }}. Action needed today.
           {% endif %}
         </div>
       </div>
@@ -87,7 +87,7 @@
         <div class="value{% if stress.lowest < 0 %} danger{% elif stress.lowest < 200 %} warn{% endif %}">
           {%- if stress.lowest < 0 -%}-${{ '{:,.0f}'.format(stress.lowest|abs) }}{%- else -%}${{ '{:,.0f}'.format(stress.lowest) }}{%- endif -%}
         </div>
-        <div class="sub">{% if stress.lowest_date and stress.lowest_date != today %}{{ stress.lowest_date }}{% else %}today{% endif %}</div>
+        <div class="sub">{% if stress.lowest_date and stress.lowest_date != today %}{{ stress.lowest_date_au or stress.lowest_date }}{% else %}today{% endif %}</div>
       </div>
       <div class="stress-fig">
         <div class="label">Today's cash</div>
