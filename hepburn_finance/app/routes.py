@@ -8,7 +8,8 @@ from app.database import get_db, get_setting, set_setting
 from app.parsers import parse_csv
 from app.categoriser import categorise_batch
 from app.forecast import forecast_daily_balances, expand_bills, expand_transfers, parse_iso
-from app.stress import compute_stress, smart_transfer_suggestions, debt_attack_order
+from app.stress import compute_stress, debt_attack_order
+from app.suggestions import smart_suggestions
 from app.notifications import notify
 
 logger = logging.getLogger(__name__)
@@ -184,7 +185,7 @@ def dashboard():
     transfers_14d = [t for t in transfers_14d if t['net_effect'] is not None]
 
     stress = compute_stress(selected_ids, today)
-    suggestions = smart_transfer_suggestions(selected_ids, today)
+    suggestions = smart_suggestions(selected_ids, today)
     debt = debt_attack_order()
 
     # Cash total uses display_balance (which respects manual `available`

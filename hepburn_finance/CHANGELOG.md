@@ -2,6 +2,24 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.5.0] — 2026-04-30
+
+The smart suggestions release. The "Smart suggestions" panel now actually thinks about your data instead of just shouting "you're going negative." Five distinct suggestion types working together to surface what matters.
+
+### Added
+- **Bill clustering detection** — when 3+ bills hit on the same day totalling >$300 *and* the forecast balance after them drops below the safe floor, you get a specific "X bills on Y day, biggest is $Z, call them to shift the date" suggestion. Identifies the largest bill in the cluster as the prime candidate to negotiate.
+- **Subscription audit** — analyses transaction cadence over the last 90 days to find recurring small charges (≤$80, low variance, weekly/fortnightly/monthly spacing). Reports total monthly bleed and yearly cost. Requires 3+ confirmed hits to avoid false positives. Also flags "stale" subs (haven't been used in 60+ days but still being charged).
+- **Category trend deltas** — last 30 days vs prior 60-day average. Flags categories that have moved >25% in either direction (with absolute floor of $40). "Up" trends are attention-flagged; "down" trends get a small celebratory note.
+- **Discretionary drift detection** — focused on takeaway/delivery/entertainment/shopping. When recent spend in these is up >30%, suggests a concrete monthly cap halfway between recent and baseline, with weekly equivalent. "Try $350/month, that's $81/week, saves $254."
+- **Suggestions module structure** — each suggestion type lives in `app/suggestions/<name>.py`. The public API `smart_suggestions(account_ids, today)` combines and priority-sorts them.
+
+### Changed
+- **Suggestion deduplication** — when discretionary drift fires for a category (e.g. Food · Takeaway), the generic trend module no longer re-reports it. The more specific cap suggestion takes priority.
+- **Bill cluster suggestion** picks the biggest single bill in the cluster as the negotiation target. NRMA $220 hitting on the same day as Vodafone $108 → it suggests calling NRMA, not Vodafone.
+
+### Migration
+No schema changes. `app.stress.smart_transfer_suggestions()` kept as a deprecated stub that delegates to the new module — anything still importing the old path keeps working.
+
 ## [0.4.0] — 2026-04-30
 
 The transactions-drive-balance release. Once you've set an opening balance for an account, transactions take over — uploading a CSV updates the displayed balance automatically. No more chasing two figures that disagree.

@@ -85,101 +85,12 @@ def compute_stress(account_ids, today=None):
 
 
 def smart_transfer_suggestions(selected_account_ids, today=None):
-    """Generate transfer suggestions to address forecast lows.
+    """DEPRECATED: kept for backward compat. Delegates to smart_suggestions().
 
-    Returns list of suggestion dicts."""
-    if today is None:
-        today = date.today()
-
-    suggestions = []
-    stress = compute_stress(selected_account_ids, today)
-
-    # 1. Forecast low — suggest transfer if there's a surplus account
-    if stress['tier'] in ('amber', 'red') and stress['lowest_date']:
-        with get_db() as conn:
-            others = conn.execute(
-                'SELECT * FROM accounts WHERE archived=0 AND id NOT IN ({}) '
-                'AND type IN (\'transaction\',\'savings\') AND balance > 0 '
-                'ORDER BY balance DESC'.format(
-                    ','.join('?' * len(selected_account_ids)) or 'NULL'
-                ),
-                tuple(selected_account_ids)
-            ).fetchall()
-
-        need = max(AMBER_FLOOR - stress['lowest'], 100)
-        # Round to nearest $10 for human-friendly amount
-        need_rounded = ((int(need) // 10) + 1) * 10
-
-        if others and others[0]['balance'] >= need_rounded:
-            source = others[0]
-            suggestions.append({
-                'icon': '→',
-                'priority': 'urgent' if stress['tier'] == 'red' else 'attention',
-                'text': (f'Move <strong>${need_rounded}</strong> from <strong>{source["name"]}</strong> '
-                         f'into your forecast accounts before {stress["lowest_date"]}.'),
-                'reasoning': (f'Forecast hits ${stress["lowest"]:,.2f} that day — this restores '
-                              f'the buffer above ${AMBER_FLOOR}.'),
-                'action': 'Plan transfer',
-            })
-        else:
-            suggestions.append({
-                'icon': '⚠',
-                'priority': 'urgent',
-                'text': f'Cash flow gap of <strong>${stress["lowest"]:,.2f}</strong> on {stress["lowest_date"]}.',
-                'reasoning': ('No surplus account has enough to cover the gap. '
-                              'Options: defer non-critical bills, request a payment plan, '
-                              'or use offset funds if available.'),
-                'action': 'Review options',
-            })
-
-    # 2. Interest-free plan expiring soon
-    with get_db() as conn:
-        plans = conn.execute(
-            'SELECT name, current_balance, expiry_date '
-            'FROM interest_free_plans '
-            'WHERE expiry_date >= ? AND current_balance > 0 '
-            'ORDER BY expiry_date ASC',
-            (today.isoformat(),)
-        ).fetchall()
-
-    for p in plans[:2]:
-        try:
-            expiry = parse_iso(p['expiry_date'])
-            days_left = (expiry - today).days
-        except (ValueError, TypeError):
-            continue
-        if days_left < 30:
-            suggestions.append({
-                'icon': '⏰',
-                'priority': 'attention',
-                'text': (f'<strong>{p["name"]}</strong> interest-free plan expires in '
-                         f'{days_left} days with ${p["current_balance"]:.2f} outstanding.'),
-                'reasoning': ('If unpaid by then, the balance rolls onto the Expired Plan Rate '
-                              '(typically 29.99%). Worth scheduling a payment now.'),
-                'action': 'Schedule payment',
-            })
-
-    # 3. Subscription leak
-    with get_db() as conn:
-        sub_count = conn.execute(
-            "SELECT COUNT(DISTINCT description) AS c, SUM(amount) AS s "
-            "FROM transactions WHERE category='Subscriptions' "
-            "AND date >= date('now', '-30 days')"
-        ).fetchone()
-
-    if sub_count and sub_count['c'] >= 3:
-        total = abs(sub_count['s'] or 0)
-        suggestions.append({
-            'icon': '✂',
-            'priority': 'good',
-            'text': (f'<strong>{sub_count["c"]} different subscriptions</strong> '
-                     f'totalling ${total:.2f} this month.'),
-            'reasoning': ('Streaming and software subscriptions overlap often. '
-                          'Worth auditing which ones the family actually used in the last 30 days.'),
-            'action': 'Review subs',
-        })
-
-    return suggestions
+    The suggestion engine has moved to app.suggestions/ with multiple modules.
+    """
+    from app.suggestions import smart_suggestions
+    return smart_suggestions(selected_account_ids, today)
 
 
 def debt_attack_order():
