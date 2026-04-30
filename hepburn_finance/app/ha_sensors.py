@@ -223,6 +223,37 @@ def compute_and_push_all():
         }
     )
 
+    # Group bills by relative-time chunks for the dashboard popup
+    def _chunk_label(days_away):
+        if days_away == 0:
+            return 'Today'
+        if days_away == 1:
+            return 'Tomorrow'
+        if days_away <= 7:
+            return 'This week'
+        if days_away <= 14:
+            return 'Next week'
+        return 'Later'
+
+    grouped = {}
+    for b in bills_only[:25]:
+        days_away = (b['date'] - today).days
+        chunk = _chunk_label(days_away)
+        grouped.setdefault(chunk, []).append({
+            'name': b['name'],
+            'amount': round(abs(b['amount']), 2),
+            'date': b['date'].isoformat(),
+            'days_away': days_away,
+            'category': b.get('category', ''),
+        })
+
+    # Order the chunks (so HA template loop is consistent)
+    chunk_order = ['Today', 'Tomorrow', 'This week', 'Next week', 'Later']
+    bills_grouped = [
+        {'label': c, 'bills': grouped[c], 'subtotal': round(sum(b['amount'] for b in grouped[c]), 2)}
+        for c in chunk_order if c in grouped
+    ]
+
     # Next single bill
     if bills_only:
         nxt = bills_only[0]  # already sorted by date
@@ -238,7 +269,7 @@ def compute_and_push_all():
                 'date': nxt['date'].isoformat(),
                 'days_away': days_away,
                 'category': nxt.get('category', ''),
-                # Bill-list attribute: detailed list for Lovelace markdown cards
+                # Flat bills_list (kept for backward-compat, used by simpler cards)
                 'bills_list': [
                     {
                         'name': b['name'],
@@ -249,6 +280,8 @@ def compute_and_push_all():
                     }
                     for b in bills_only[:8]
                 ],
+                # Grouped chunks for the rich popup
+                'bills_grouped': bills_grouped,
             }
         )
     else:
@@ -262,21 +295,25 @@ def compute_and_push_all():
                 'name': 'No upcoming bills',
                 'days_away': None,
                 'bills_list': [],
+                'bills_grouped': [],
             }
         )
 
-    # Debt and redraw totals
+    # Debt and redraw totals — compute from hydrated balances (opening + tx sum)
+    from app.balances import hydrate_accounts
     with get_db() as conn:
-        debt_total = conn.execute(
-            "SELECT COALESCE(SUM(balance), 0) FROM accounts "
-            "WHERE archived=0 AND type IN "
+        loan_rows = conn.execute(
+            "SELECT * FROM accounts WHERE archived=0 AND type IN "
             "('loan_investment','loan_personal','loan_informal','ppor','loan')"
-        ).fetchone()[0]
+        ).fetchall()
         redraw_total = conn.execute(
             "SELECT COALESCE(SUM(available_redraw), 0) FROM accounts "
             "WHERE archived=0 AND type IN "
             "('loan_investment','loan_personal','ppor','loan')"
         ).fetchone()[0]
+
+    debt_accounts = hydrate_accounts(loan_rows)
+    debt_total = sum(a['computed_balance'] for a in debt_accounts)
 
     push_sensor(
         'hepburn_finance_debt_total',

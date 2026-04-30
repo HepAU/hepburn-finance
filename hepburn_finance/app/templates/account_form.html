@@ -11,7 +11,13 @@
 
   <form class="form-card" method="POST">
     <h2>{% if account %}{{ account.name }}{% else %}New account{% endif %}</h2>
-    <p class="form-sub">Manually enter the current values. Once you upload CSVs, transactions update automatically.</p>
+    <p class="form-sub">
+      {% if account %}
+        Balance is computed from opening + transactions. Upload CSVs to keep it current.
+      {% else %}
+        Enter the opening balance — what's in the account today. From here, transactions drive it.
+      {% endif %}
+    </p>
 
     <div class="form-grid-2">
       <div class="form-row">
@@ -52,43 +58,82 @@
       </div>
     </div>
 
-    <div class="form-grid-2">
-      <div class="form-row">
-        <label>Current balance</label>
-        <input type="number" name="balance" step="0.01" value="{{ account.balance if account else '' }}" placeholder="0.00" required>
-      </div>
-      <div class="form-row">
-        <label>Available <span class="form-hint">(what you can actually spend)</span></label>
-        <input type="number" name="available" step="0.01" value="{{ account.available if account and account.available is not none else '' }}" placeholder="For credit/transaction">
-      </div>
+    {% if not account %}
+    <div class="form-row">
+      <label>Opening balance <span class="form-hint">(what's in the account right now)</span></label>
+      <input type="number" name="opening_balance" step="0.01" placeholder="0.00" required>
+      <p class="form-hint" style="margin-top: 4px;">
+        Once set, transactions drive the displayed balance. You won't normally edit this again.
+      </p>
     </div>
+    {% else %}
+    <div class="form-row" style="background: var(--bg-1); padding: 12px 14px; border-radius: 8px;">
+      <label style="margin: 0;">Current computed balance</label>
+      <div style="font-size: 22px; font-weight: 500; padding: 6px 0; font-feature-settings: 'tnum';">
+        {% set bal = account.computed_balance if account.computed_balance is defined else account.balance %}
+        {% if bal is none %}—{% else %}{{ ('-' if bal < 0 else '') }}${{ '{:,.2f}'.format(bal | abs) }}{% endif %}
+      </div>
+      <p class="form-hint" style="margin: 0;">
+        Opening balance: {% if account.opening_balance is not none %}${{ '%.2f' | format(account.opening_balance) }}{% else %}not set{% endif %}{% if account.latest_tx_date %} · Last transaction: {{ account.latest_tx_date }}{% endif %}
+      </p>
+    </div>
+    {% endif %}
 
     <div class="form-grid-2">
+      <div class="form-row">
+        <label>Available <span class="form-hint">(what bank says is spendable now — pending holds excluded)</span></label>
+        <input type="number" name="available" step="0.01" value="{{ account.available if account and account.available is not none else '' }}" placeholder="For credit/transaction">
+      </div>
       <div class="form-row">
         <label>Credit limit <span class="form-hint">(cards only)</span></label>
         <input type="number" name="credit_limit" step="0.01" value="{{ account.credit_limit if account and account.credit_limit is not none else '' }}" placeholder="e.g. 15000">
       </div>
-      <div class="form-row">
-        <label>Redraw available <span class="form-hint">(loans — extra you've paid in)</span></label>
-        <input type="number" name="available_redraw" step="0.01" value="{{ account.available_redraw if account and account.available_redraw is not none else '' }}" placeholder="e.g. 4500">
-      </div>
     </div>
 
     <div class="form-grid-2">
       <div class="form-row">
+        <label>Redraw available <span class="form-hint">(loans — extra you've paid in)</span></label>
+        <input type="number" name="available_redraw" step="0.01" value="{{ account.available_redraw if account and account.available_redraw is not none else '' }}" placeholder="e.g. 4500">
+      </div>
+      <div class="form-row">
         <label>Interest rate % <span class="form-hint">(loans/cards)</span></label>
         <input type="number" name="interest_rate" step="0.01" value="{{ account.interest_rate if account and account.interest_rate is not none else '' }}" placeholder="e.g. 6.0">
       </div>
-      <div class="form-row checkbox-row" style="align-self: end; padding-bottom: 12px;">
-        <input type="checkbox" name="is_deductible" id="is_deductible" {% if account and account.is_deductible %}checked{% endif %}>
-        <label for="is_deductible">Tax-deductible interest (investment loans)</label>
-      </div>
+    </div>
+
+    <div class="form-row checkbox-row">
+      <input type="checkbox" name="is_deductible" id="is_deductible" {% if account and account.is_deductible %}checked{% endif %}>
+      <label for="is_deductible">Tax-deductible interest (investment loans)</label>
     </div>
 
     <div class="form-row">
       <label>Notes <span class="form-hint">(optional)</span></label>
       <textarea name="notes" rows="2" placeholder="Anything to remember">{{ account.notes if account and account.notes else '' }}</textarea>
     </div>
+
+    {% if account %}
+    <details class="form-card" style="background: var(--bg-1); margin: 16px 0; padding: 0;">
+      <summary style="padding: 12px 14px; cursor: pointer; font-size: 12px; color: var(--text-3);">⚙ Override opening balance (advanced)</summary>
+      <div style="padding: 0 14px 14px 14px;">
+        <p class="form-hint" style="margin-top: 0;">
+          Use this only if reality has drifted from the dashboard — e.g. a bank fee that didn't import, or you've started fresh and want to set today's balance directly. Most of the time, upload a CSV instead.
+        </p>
+        <div class="form-grid-2">
+          <div class="form-row">
+            <label>New opening balance</label>
+            <input type="number" name="new_opening_balance" step="0.01" placeholder="Leave blank to keep">
+          </div>
+          <div class="form-row">
+            <label>As-of date</label>
+            <input type="date" name="opening_as_of" placeholder="Defaults to today">
+          </div>
+        </div>
+        <p class="form-hint">
+          Setting a new opening balance will delete all transactions before the as-of date and use the new figure as the starting point.
+        </p>
+      </div>
+    </details>
+    {% endif %}
 
     <div class="form-actions">
       <div>

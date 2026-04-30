@@ -208,24 +208,26 @@ def expand_transfers(from_date, to_date, selected_account_ids):
 def get_starting_balance(account_ids):
     """Spendable cash today across the selected accounts.
 
-    Uses `available` when set, otherwise `balance`. Banks show available as
-    the actionable figure (it nets out pending holds and authorisations),
-    so it's what we should start the forecast from.
+    Uses `available` when set (bank's "spendable now" figure that nets out
+    pending holds), otherwise the computed balance from opening_balance +
+    transactions. This is what the user could actually spend right now.
     """
     if not account_ids:
         return 0.0
+    from app.balances import compute_account_balance
     with get_db() as conn:
         placeholders = ','.join('?' * len(account_ids))
         rows = conn.execute(
-            f'SELECT balance, available FROM accounts WHERE id IN ({placeholders})',
+            f'SELECT id, balance, opening_balance, available, type '
+            f'FROM accounts WHERE id IN ({placeholders})',
             tuple(account_ids)
         ).fetchall()
-    total = 0.0
-    for r in rows:
-        if r['available'] is not None:
-            total += r['available']
-        else:
-            total += r['balance']
+        total = 0.0
+        for r in rows:
+            if r['available'] is not None:
+                total += r['available']
+            else:
+                total += compute_account_balance(r, conn=conn)
     return total
 
 

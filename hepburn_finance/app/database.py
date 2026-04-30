@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     account_number TEXT,
     type TEXT NOT NULL,
     balance REAL NOT NULL DEFAULT 0,
+    opening_balance REAL,
+    balance_last_updated TEXT,
     available REAL,
     available_redraw REAL,
     credit_limit REAL,
@@ -375,6 +377,30 @@ def run_migrations(conn):
                     conn.execute(
                         f"UPDATE {table} SET {col}=NULL WHERE {col}='None'"
                     )
+
+    # 0.4.0: balance-lock model. Add opening_balance and balance_last_updated.
+    # When opening_balance is non-null, the displayed balance is computed from
+    # opening_balance + sum(non-internal transactions). The legacy `balance`
+    # column stays as a fallback for accounts that never get a real opening
+    # value set (manual mode).
+    #
+    # Migration strategy: copy current `balance` into `opening_balance` for
+    # every existing account and set balance_last_updated to now. From this
+    # point on, balance computation uses opening_balance + transactions.
+    if not _column_exists(conn, 'accounts', 'opening_balance'):
+        conn.execute('ALTER TABLE accounts ADD COLUMN opening_balance REAL')
+        # Seed opening_balance from current balance for existing accounts
+        conn.execute(
+            'UPDATE accounts SET opening_balance = balance '
+            'WHERE opening_balance IS NULL'
+        )
+    if not _column_exists(conn, 'accounts', 'balance_last_updated'):
+        conn.execute(
+            "ALTER TABLE accounts ADD COLUMN balance_last_updated TEXT"
+        )
+        conn.execute(
+            "UPDATE accounts SET balance_last_updated = COALESCE(updated_at, datetime('now'))"
+        )
 
 
 def init_db():

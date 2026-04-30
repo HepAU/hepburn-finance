@@ -152,8 +152,8 @@
           </span>
         </div>
         <div class="acc-name">{{ a.name }}</div>
-        {# Decide which figure is the "headline" — for transaction & credit accounts that's available;
-           for everything else (savings, loans), it's balance. #}
+        {# Headline value: for transaction/credit show available (bank's "spendable now"),
+           for others show computed_balance (opening + transactions). #}
         {% if a.type in ['transaction','credit'] and a.available is not none %}
           <div class="acc-balance
             {%- if a.available == 0 %} dim
@@ -161,15 +161,15 @@
             {%- elif a.type == 'transaction' and a.available < 100 %} warn
             {%- endif %}">{{ fmt_money(a.available) }}</div>
           <div class="acc-balance-secondary">
-            <span class="acc-balance-label">Balance</span> {{ fmt_money(a.balance) }}
+            <span class="acc-balance-label">Balance</span> {{ fmt_money(a.computed_balance) }}
           </div>
         {% else %}
           <div class="acc-balance
             {%- if a.type in ['loan','ppor','loan_investment','loan_personal','loan_informal'] %} neutral
-            {%- elif a.balance == 0 %} dim
-            {%- elif a.balance < 0 %} danger
-            {%- elif a.type == 'transaction' and a.balance < 200 %} warn
-            {%- endif %}">{{ fmt_money(a.balance) }}</div>
+            {%- elif a.computed_balance == 0 %} dim
+            {%- elif a.computed_balance < 0 %} danger
+            {%- elif a.type == 'transaction' and a.computed_balance < 200 %} warn
+            {%- endif %}">{{ fmt_money(a.computed_balance) }}</div>
           {% if a.type in ['loan','ppor','loan_investment','loan_personal'] and a.available_redraw and a.available_redraw > 0 %}
           <div class="acc-balance-secondary">
             <span class="acc-balance-label">Redraw</span> {{ fmt_money(a.available_redraw, 0) }}
@@ -180,6 +180,11 @@
           {% if a.account_number and a.account_number != 'None' %}{{ a.account_number }}{% endif %}
           {% if a.type == 'credit' and a.credit_limit %} · ${{ '{:,.0f}'.format(a.credit_limit) }} limit{% endif %}
         </div>
+        {% if a.latest_tx_date %}
+          <div class="acc-last-updated">Updated {{ a.latest_tx_date }}</div>
+        {% elif a.opening_balance is not none %}
+          <div class="acc-last-updated">No transactions yet</div>
+        {% endif %}
       </div>
       {% endfor %}
       <a class="add-account-card" href="{{ url_for('main.new_account') }}">
@@ -547,38 +552,85 @@ function showPopover(day, events, cell, evt) {
 
   const balValEl = document.getElementById('popover-balance-value');
   const balLabel = document.getElementById('popover-balance');
+  const balLabelText = balLabel.querySelector('.label');
   balLabel.classList.remove('danger','warn');
 
-  if (FORECAST_DATA && FORECAST_DATA.balances) {
+  // Past day → show 'Total' label and the day's spending sum (from past_summary if available)
+  const isPast = (CAL_YEAR < TODAY.getFullYear()) ||
+    (CAL_YEAR === TODAY.getFullYear() && CAL_MONTH < TODAY.getMonth()) ||
+    (CAL_YEAR === TODAY.getFullYear() && CAL_MONTH === TODAY.getMonth() && day < TODAY.getDate());
+
+  if (FORECAST_DATA) {
     const k = dateKey(CAL_YEAR, CAL_MONTH, day);
-    const bal = FORECAST_DATA.balances[k];
-    if (bal !== undefined) {
-      balValEl.textContent = fmt(bal, 0);
-      if (bal < 0) balLabel.classList.add('danger');
-      else if (bal < 500) balLabel.classList.add('warn');
-    } else { balValEl.textContent = '—'; }
+    if (isPast && FORECAST_DATA.past_summary && FORECAST_DATA.past_summary[k]) {
+      balLabelText.textContent = 'Day total';
+      balValEl.textContent = fmt(FORECAST_DATA.past_summary[k].total, 0);
+    } else if (FORECAST_DATA.balances) {
+      balLabelText.textContent = 'Forecast';
+      const bal = FORECAST_DATA.balances[k];
+      if (bal !== undefined) {
+        balValEl.textContent = fmt(bal, 0);
+        if (bal < 0) balLabel.classList.add('danger');
+        else if (bal < 500) balLabel.classList.add('warn');
+      } else { balValEl.textContent = '—'; }
+    }
   }
 
   const list = document.getElementById('popover-list');
-  if (events.length === 0) {
-    list.innerHTML = `<div class="popover-empty">No bills, income, or transfers on this day.</div>`;
+  const popoverActions = document.querySelector('.popover-actions');
+
+  // Past day: hide the "Add bill/transfer" buttons, fetch real transactions
+  if (isPast) {
+    if (popoverActions) popoverActions.style.display = 'none';
+    list.innerHTML = `<div class="popover-empty">Loading transactions...</div>`;
+
+    const dateStr = dateKey(CAL_YEAR, CAL_MONTH, day);
+    fetch('{{ url_for("main.api_day_details") }}?date=' + dateStr)
+      .then(r => r.json())
+      .then(data => {
+        const txs = data.transactions || [];
+        if (txs.length === 0) {
+          list.innerHTML = `<div class="popover-empty">No transactions on this day.</div>`;
+        } else {
+          list.innerHTML = txs.map(t => {
+            const isIncome = t.amount > 0;
+            const cls = isIncome ? 'income' : 'bill';
+            return `<li class="popover-item">
+              <div>
+                <div class="popover-name">${t.description}</div>
+                <div class="popover-cat">${t.category} · ${t.account_name}</div>
+              </div>
+              <div class="popover-amount ${cls}">${isIncome ? '+' : ''}${fmt(t.amount)}</div>
+            </li>`;
+          }).join('');
+        }
+      })
+      .catch(() => {
+        list.innerHTML = `<div class="popover-empty">Could not load transactions.</div>`;
+      });
   } else {
-    const sorted = [...events].sort((a,b) => {
-      const aAmt = a.kind === 'transfer' ? a.amount : Math.abs(a.amount);
-      const bAmt = b.kind === 'transfer' ? b.amount : Math.abs(b.amount);
-      return bAmt - aAmt;
-    });
-    list.innerHTML = sorted.map(e => {
-      const cls = eventClass(e);
-      const showAmount = e.kind === 'transfer' ? `↔ ${fmt(e.amount)}` : `${e.amount > 0 ? '+' : ''}${fmt(e.amount)}`;
-      return `<li class="popover-item">
-        <div>
-          <div class="popover-name">${e.name}</div>
-          <div class="popover-cat">${e.category} · ${e.recurring}</div>
-        </div>
-        <div class="popover-amount ${cls}">${showAmount}</div>
-      </li>`;
-    }).join('');
+    // Future day: show scheduled bills/transfers as before, and show add buttons
+    if (popoverActions) popoverActions.style.display = '';
+    if (events.length === 0) {
+      list.innerHTML = `<div class="popover-empty">No bills, income, or transfers on this day.</div>`;
+    } else {
+      const sorted = [...events].sort((a,b) => {
+        const aAmt = a.kind === 'transfer' ? a.amount : Math.abs(a.amount);
+        const bAmt = b.kind === 'transfer' ? b.amount : Math.abs(b.amount);
+        return bAmt - aAmt;
+      });
+      list.innerHTML = sorted.map(e => {
+        const cls = eventClass(e);
+        const showAmount = e.kind === 'transfer' ? `↔ ${fmt(e.amount)}` : `${e.amount > 0 ? '+' : ''}${fmt(e.amount)}`;
+        return `<li class="popover-item">
+          <div>
+            <div class="popover-name">${e.name}</div>
+            <div class="popover-cat">${e.category} · ${e.recurring}</div>
+          </div>
+          <div class="popover-amount ${cls}">${showAmount}</div>
+        </li>`;
+      }).join('');
+    }
   }
 
   const rect = cell.getBoundingClientRect();

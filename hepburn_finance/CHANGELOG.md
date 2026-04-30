@@ -2,6 +2,23 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.4.0] — 2026-04-30
+
+The transactions-drive-balance release. Once you've set an opening balance for an account, transactions take over — uploading a CSV updates the displayed balance automatically. No more chasing two figures that disagree.
+
+### Changed
+- **Account balance is now computed**, not manually maintained. Each account has an `opening_balance` (set when you create the account) and the displayed balance is `opening_balance + sum(non-internal transactions)`. CSV uploads keep it current.
+- **"Last updated" indicator** on each account card showing the date of the most recent transaction. Tells you at a glance whether the figure is fresh or stale.
+- **The "Balance" field is gone from the edit form** for existing accounts. Replaced with a read-only "Current computed balance" display showing opening balance and last-tx date.
+- **Override path** for opening balance is hidden in a `<details>` disclosure on the edit page. Use it only when reality has drifted (a bank fee that didn't import) or you want to start fresh — setting a new opening balance with an as-of date wipes earlier transactions.
+
+### Added
+- **HA bills_grouped attribute** on `sensor.hepburn_finance_next_bill_amount` — bills are pre-chunked server-side into Today / Tomorrow / This week / Next week / Later sections with subtotals. Used by the redesigned dashboard popup.
+- **Calendar past-day click → real transactions**. Click any past day on the calendar and the popover now shows the actual imported transactions for that day, not just the sum.
+
+### Migration
+- Existing accounts get `opening_balance` seeded from their current `balance` value automatically. Computed balances will match what you saw in v0.3.0 immediately, then update as you upload CSVs.
+
 ## [0.3.0] — 2026-04-29
 
 The Home Assistant integration release. Cash flow status and upcoming bills are now native HA sensors you can put on any Lovelace dashboard, automate against, or notify on.

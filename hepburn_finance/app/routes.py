@@ -147,7 +147,7 @@ def dashboard():
     selected_ids = _selected_account_ids()
 
     with get_db() as conn:
-        all_accounts = conn.execute(
+        all_accounts_raw = conn.execute(
             "SELECT * FROM accounts WHERE archived=0 ORDER BY bank, type, name"
         ).fetchall()
         recent_tx = conn.execute(
@@ -160,12 +160,16 @@ def dashboard():
             "SELECT * FROM interest_free_plans ORDER BY expiry_date ASC"
         ).fetchall()
 
+    # Hydrate accounts with computed balances + last-updated dates
+    from app.balances import hydrate_accounts
+    all_accounts = hydrate_accounts(all_accounts_raw)
+
     # Account-id → name map (for transfer rendering)
     account_name = {a['id']: a['name'] for a in all_accounts}
 
     accounts_by_bank = {}
     for a in all_accounts:
-        accounts_by_bank.setdefault(a['bank'], []).append(dict(a))
+        accounts_by_bank.setdefault(a['bank'], []).append(a)
 
     balances, starting_bal, instances_60d = forecast_daily_balances(
         selected_ids, days_ahead=60, today=today
@@ -183,16 +187,18 @@ def dashboard():
     suggestions = smart_transfer_suggestions(selected_ids, today)
     debt = debt_attack_order()
 
+    # Cash total uses display_balance (which respects manual `available`
+    # override on transaction/credit accounts), so it matches what the user
+    # sees on the cards. For savings accounts that's just computed_balance.
     cash_total = sum(
-        (a['available'] if a['available'] is not None else a['balance'])
-        for a in all_accounts
+        a['display_balance'] for a in all_accounts
         if a['type'] in ('transaction', 'savings')
     )
     debt_total = sum(
-        a['balance'] for a in all_accounts
+        a['computed_balance'] for a in all_accounts
         if a['type'] in ('loan_investment', 'loan_personal', 'loan_informal', 'ppor', 'loan')
     )
-    credit_total = sum(a['balance'] for a in all_accounts if a['type'] == 'credit')
+    credit_total = sum(a['computed_balance'] for a in all_accounts if a['type'] == 'credit')
     redraw_total = sum(
         (a['available_redraw'] or 0) for a in all_accounts
         if a['type'] in ('loan_investment', 'loan_personal', 'ppor', 'loan')
@@ -240,18 +246,25 @@ def toggle_account():
 @bp.route('/accounts/new', methods=['GET', 'POST'])
 def new_account():
     if request.method == 'POST':
+        opening_bal = request.form.get('opening_balance')
+        if opening_bal is None or opening_bal == '':
+            return 'Opening balance is required', 400
+        opening_bal = float(opening_bal)
+
         with get_db() as conn:
             conn.execute(
-                'INSERT INTO accounts (bank, name, nickname, account_number, type, balance, '
+                'INSERT INTO accounts (bank, name, nickname, account_number, type, '
+                'balance, opening_balance, balance_last_updated, '
                 'available, available_redraw, credit_limit, interest_rate, is_deductible, notes) '
-                'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                'VALUES (?,?,?,?,?,?,?,datetime(\'now\'),?,?,?,?,?,?)',
                 (
                     request.form.get('bank', '').strip() or 'Other',
                     request.form.get('name', '').strip(),
                     request.form.get('nickname', '').strip() or None,
                     request.form.get('account_number', '').strip() or None,
                     request.form.get('type', 'transaction'),
-                    float(request.form.get('balance') or 0),
+                    opening_bal,  # legacy `balance` matches opening at creation
+                    opening_bal,
                     float(request.form.get('available')) if request.form.get('available') else None,
                     float(request.form.get('available_redraw')) if request.form.get('available_redraw') else None,
                     float(request.form.get('credit_limit')) if request.form.get('credit_limit') else None,
@@ -267,14 +280,33 @@ def new_account():
 @bp.route('/accounts/<int:aid>/edit', methods=['GET', 'POST'])
 def edit_account(aid):
     with get_db() as conn:
-        acc = conn.execute('SELECT * FROM accounts WHERE id=?', (aid,)).fetchone()
-        if not acc:
+        acc_row = conn.execute('SELECT * FROM accounts WHERE id=?', (aid,)).fetchone()
+        if not acc_row:
             return 'Not found', 404
 
         if request.method == 'POST':
+            # Override opening balance flow (advanced — hidden in <details>)
+            new_opening = request.form.get('new_opening_balance')
+            opening_as_of = request.form.get('opening_as_of') or date.today().isoformat()
+            if new_opening:
+                try:
+                    new_opening_val = float(new_opening)
+                    # Wipe transactions before the as-of date
+                    conn.execute(
+                        'DELETE FROM transactions WHERE account_id=? AND date < ?',
+                        (aid, opening_as_of)
+                    )
+                    conn.execute(
+                        'UPDATE accounts SET opening_balance=?, balance_last_updated=datetime(\'now\') '
+                        'WHERE id=?',
+                        (new_opening_val, aid)
+                    )
+                except ValueError:
+                    pass
+
             conn.execute(
                 'UPDATE accounts SET bank=?, name=?, nickname=?, account_number=?, '
-                'type=?, balance=?, available=?, available_redraw=?, credit_limit=?, '
+                'type=?, available=?, available_redraw=?, credit_limit=?, '
                 'interest_rate=?, is_deductible=?, notes=?, updated_at=datetime(\'now\') WHERE id=?',
                 (
                     request.form.get('bank', '').strip() or 'Other',
@@ -282,7 +314,6 @@ def edit_account(aid):
                     request.form.get('nickname', '').strip() or None,
                     request.form.get('account_number', '').strip() or None,
                     request.form.get('type', 'transaction'),
-                    float(request.form.get('balance') or 0),
                     float(request.form.get('available')) if request.form.get('available') else None,
                     float(request.form.get('available_redraw')) if request.form.get('available_redraw') else None,
                     float(request.form.get('credit_limit')) if request.form.get('credit_limit') else None,
@@ -293,7 +324,11 @@ def edit_account(aid):
                 ),
             )
             return redirect(url_for('main.dashboard'))
-    return render_template('account_form.html', account=dict(acc))
+
+    # Hydrate the single account so the form can show computed_balance
+    from app.balances import hydrate_accounts
+    hydrated = hydrate_accounts([acc_row])
+    return render_template('account_form.html', account=hydrated[0] if hydrated else dict(acc_row))
 
 
 @bp.route('/accounts/<int:aid>/delete', methods=['POST'])
@@ -895,6 +930,40 @@ def upload():
 
 
 # ---------- API ----------
+
+@bp.route('/api/day-details')
+def api_day_details():
+    """Return all transactions on a specific date for the calendar's day-click popover."""
+    day = request.args.get('date', '')
+    if not day:
+        return jsonify({'transactions': []})
+    selected_ids = _selected_account_ids()
+    if not selected_ids:
+        return jsonify({'transactions': []})
+    placeholders = ','.join('?' * len(selected_ids))
+    with get_db() as conn:
+        rows = conn.execute(
+            f"SELECT t.id, t.date, t.amount, t.description, t.category, "
+            f"t.is_internal_transfer, a.name AS account_name "
+            f"FROM transactions t JOIN accounts a ON t.account_id = a.id "
+            f"WHERE t.account_id IN ({placeholders}) AND t.date = ? "
+            f"AND (t.is_internal_transfer = 0 OR t.is_internal_transfer IS NULL) "
+            f"ORDER BY ABS(t.amount) DESC",
+            (*selected_ids, day)
+        ).fetchall()
+    return jsonify({
+        'transactions': [
+            {
+                'id': r['id'],
+                'amount': r['amount'],
+                'description': r['description'],
+                'category': r['category'] or 'Uncategorised',
+                'account_name': r['account_name'],
+            }
+            for r in rows
+        ]
+    })
+
 
 @bp.route('/api/forecast')
 def api_forecast():
