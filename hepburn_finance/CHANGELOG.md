@@ -2,6 +2,27 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.5.1] — 2026-04-30
+
+The "make this safe to share" release. Removes all demo seed data from new installs and provides a one-shot cleanup tool for existing users to remove what was seeded earlier.
+
+### Changed
+- **`seed_initial_accounts()` is now a no-op.** Fresh installs start with zero accounts, zero interest-free plans, and the user's first action is "+ Add account". Public clones of the GitHub repository will not contain any pre-loaded financial data.
+
+### Added
+- **One-shot cleanup tool at `/admin/cleanup`.** Detects seed data still present from older v0.1.x installs and lets the user choose, per item:
+  - Leave alone (default)
+  - Keep account, wipe transactions (for a fresh start with the account itself)
+  - Remove account + everything in it
+  - For interest-free plans: keep or remove
+- **Two-step confirmation**: must type `DELETE` exactly to confirm.
+- **Done screen** showing exactly what was changed.
+- **Dashboard banner** appears only when seed data is present, linking to the cleanup tool. Disappears once everything is cleaned.
+
+### Notes for upgrading users
+- Pandora and 7 other interest-free plans were originally seeded as part of the demo data. They were never on any uploaded statement. Use the cleanup tool to remove them.
+- Interest-free plans are not auto-detected from CSV uploads — they're a Latitude-specific feature that doesn't appear in transaction exports. Add real ones manually if you want them tracked.
+
 ## [0.5.0] — 2026-04-30
 
 The smart suggestions release. The "Smart suggestions" panel now actually thinks about your data instead of just shouting "you're going negative." Five distinct suggestion types working together to surface what matters.

@@ -227,6 +227,7 @@ def dashboard():
         debt_total=debt_total,
         credit_total=credit_total,
         redraw_total=redraw_total,
+        seed_data_present=_detect_seed_data()['has_any'],
     )
 
 
@@ -1037,6 +1038,118 @@ def api_ha_refresh():
     except Exception as e:
         logger.exception('HA refresh failed')
         return jsonify({'pushed': False, 'error': str(e)}), 500
+
+
+# ---------- One-shot cleanup of v0.1.x demo seed data ----------
+# In v0.1.0 the add-on seeded demo accounts + interest-free plans on first
+# install. From v0.5.1 onwards installs are empty by default. Existing users
+# can use this page to remove the seed data left over from earlier installs.
+
+SEED_ACCOUNT_NAMES = {
+    'Card Account', 'Income & Bills Account', 'Rainy Day Funds',
+    'Other Peoples Money', 'Holiday Funds', 'Tax Account',
+    'Mortgage Loan (PPOR)', 'Robina Mortgage', 'Nundah Mortgage',
+    'Gem Visa',
+}
+
+SEED_PLAN_NAMES = {
+    'Penrith Auto', 'Pandora purchase', 'December purchase', 'February purchase',
+    'Harvey Norman (electrical)', 'Harvey Norman (computer)',
+    'Amazon (small)', 'Amazon (larger)',
+}
+
+
+def _detect_seed_data():
+    """Return a dict describing seed data still present in the DB."""
+    with get_db() as conn:
+        if not SEED_ACCOUNT_NAMES:
+            accounts = []
+        else:
+            accounts = conn.execute(
+                "SELECT id, name, bank, type, balance, opening_balance "
+                "FROM accounts WHERE name IN ({}) AND archived=0".format(
+                    ','.join('?' * len(SEED_ACCOUNT_NAMES))
+                ),
+                tuple(SEED_ACCOUNT_NAMES)
+            ).fetchall()
+
+        if not SEED_PLAN_NAMES:
+            plans = []
+        else:
+            plans = conn.execute(
+                "SELECT id, name, current_balance, expiry_date "
+                "FROM interest_free_plans WHERE name IN ({})".format(
+                    ','.join('?' * len(SEED_PLAN_NAMES))
+                ),
+                tuple(SEED_PLAN_NAMES)
+            ).fetchall()
+
+        # Per-account transaction counts so user can see what's there
+        tx_counts = {}
+        for a in accounts:
+            cnt = conn.execute(
+                'SELECT COUNT(*) FROM transactions WHERE account_id=?',
+                (a['id'],)
+            ).fetchone()[0]
+            tx_counts[a['id']] = cnt
+
+    return {
+        'accounts': [dict(a, tx_count=tx_counts.get(a['id'], 0)) for a in accounts],
+        'plans': [dict(p) for p in plans],
+        'has_any': len(accounts) > 0 or len(plans) > 0,
+    }
+
+
+@bp.route('/admin/cleanup', methods=['GET', 'POST'])
+def admin_cleanup():
+    if request.method == 'POST':
+        confirm = request.form.get('confirm', '').strip()
+        if confirm != 'DELETE':
+            return ('Confirmation phrase did not match. '
+                    'Type "DELETE" exactly to proceed. '
+                    '<a href="/admin/cleanup">Try again</a>'), 400
+
+        seed = _detect_seed_data()
+        removed_accounts, wiped_tx_accounts, removed_plans = [], [], []
+
+        with get_db() as conn:
+            for a in seed['accounts']:
+                action = request.form.get(f'action_{a["id"]}', 'keep')
+                if action == 'remove':
+                    conn.execute('DELETE FROM transactions WHERE account_id=?', (a['id'],))
+                    conn.execute('DELETE FROM interest_free_plans WHERE account_id=?', (a['id'],))
+                    conn.execute('DELETE FROM scheduled_bills WHERE account_id=?', (a['id'],))
+                    conn.execute(
+                        'DELETE FROM scheduled_transfers '
+                        'WHERE from_account_id=? OR to_account_id=?',
+                        (a['id'], a['id'])
+                    )
+                    conn.execute('DELETE FROM accounts WHERE id=?', (a['id'],))
+                    removed_accounts.append(a['name'])
+                elif action == 'wipe_tx':
+                    conn.execute('DELETE FROM transactions WHERE account_id=?', (a['id'],))
+                    conn.execute(
+                        "UPDATE accounts SET balance_last_updated=datetime('now') "
+                        "WHERE id=?",
+                        (a['id'],)
+                    )
+                    wiped_tx_accounts.append(a['name'])
+
+            for p in seed['plans']:
+                action = request.form.get(f'plan_{p["id"]}', 'keep')
+                if action == 'remove':
+                    conn.execute('DELETE FROM interest_free_plans WHERE id=?', (p['id'],))
+                    removed_plans.append(p['name'])
+
+        return render_template(
+            'admin_cleanup_done.html',
+            removed_accounts=removed_accounts,
+            wiped_tx_accounts=wiped_tx_accounts,
+            removed_plans=removed_plans,
+        )
+
+    seed = _detect_seed_data()
+    return render_template('admin_cleanup.html', seed=seed)
 
 
 @bp.route('/ha-dashboard')

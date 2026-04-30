@@ -37,6 +37,23 @@
     </div>
   </div>
 
+  {% if seed_data_present %}
+  <div style="background: linear-gradient(90deg, rgba(245,181,68,0.12), rgba(245,181,68,0.04));
+              border: 1px solid rgba(245,181,68,0.3); border-radius: 8px;
+              padding: 14px 18px; margin-bottom: 18px; display: flex;
+              align-items: center; gap: 14px; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 200px;">
+      <div style="font-weight: 600; color: var(--amber); font-size: 14px;">
+        ⚠ Demo data detected
+      </div>
+      <div style="font-size: 12px; color: var(--text-2); margin-top: 4px;">
+        Some accounts and interest-free plans were created automatically by the original install. Review what's there and clean up what you don't want.
+      </div>
+    </div>
+    <a class="btn primary" href="{{ url_for('main.admin_cleanup') }}">Review &amp; clean up</a>
+  </div>
+  {% endif %}
+
   <!-- Stress meter -->
   <div class="stress-card tier-{{ stress.tier }}">
     <div class="stress-grid">

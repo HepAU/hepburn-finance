@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>Cleanup complete</h1>
+      <p>Demo data has been removed as requested.</p>
+    </div>
+    <a class="btn primary" href="{{ url_for('main.dashboard') }}">Back to dashboard</a>
+  </div>
+
+  <div class="form-card">
+    {% if removed_accounts %}
+    <div style="margin-bottom: 20px;">
+      <h3 style="font-size: 14px; margin-bottom: 8px; color: var(--red);">
+        Removed accounts ({{ removed_accounts|length }})
+      </h3>
+      <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: var(--text-2);">
+        {% for name in removed_accounts %}<li>{{ name }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if wiped_tx_accounts %}
+    <div style="margin-bottom: 20px;">
+      <h3 style="font-size: 14px; margin-bottom: 8px; color: var(--amber);">
+        Wiped transactions on ({{ wiped_tx_accounts|length }})
+      </h3>
+      <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: var(--text-2);">
+        {% for name in wiped_tx_accounts %}<li>{{ name }}</li>{% endfor %}
+      </ul>
+      <p class="form-hint" style="margin-top: 10px;">
+        Account kept, balance reset to opening_balance. Upload a fresh CSV to repopulate transactions.
+      </p>
+    </div>
+    {% endif %}
+
+    {% if removed_plans %}
+    <div style="margin-bottom: 20px;">
+      <h3 style="font-size: 14px; margin-bottom: 8px; color: var(--red);">
+        Removed interest-free plans ({{ removed_plans|length }})
+      </h3>
+      <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: var(--text-2);">
+        {% for name in removed_plans %}<li>{{ name }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if not (removed_accounts or wiped_tx_accounts or removed_plans) %}
+    <p style="color: var(--text-3); text-align: center; padding: 20px 0;">
+      Nothing was changed — all items were left alone.
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

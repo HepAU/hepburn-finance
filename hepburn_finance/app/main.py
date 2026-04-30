@@ -49,54 +49,16 @@ def create_app():
 
 
 def seed_initial_accounts():
-    """If the accounts table is empty, seed with the Bendigo + Latitude
-    accounts we know about. User can edit/delete via the UI."""
-    from app.database import get_db
-    with get_db() as conn:
-        count = conn.execute('SELECT COUNT(*) FROM accounts').fetchone()[0]
-        if count > 0:
-            return
+    """No-op as of v0.5.1.
 
-        bendigo = [
-            ('Bendigo', 'Card Account',           'Day-to-day debit',     '223 214 727', 'transaction', 87.06,    20.12, None, None, 0),
-            ('Bendigo', 'Income & Bills Account', 'Main hub · salary in', '223 214 818', 'transaction', 160.20,   None,  None, None, 0),
-            ('Bendigo', 'Rainy Day Funds',        'Sub-account',          '223 214 826', 'savings',     0.00,     None,  None, None, 0),
-            ('Bendigo', 'Other Peoples Money',    'Sub-account',          '223 214 842', 'savings',     0.00,     None,  None, None, 0),
-            ('Bendigo', 'Holiday Funds',          'Sub-account',          '223 214 859', 'savings',     0.00,     None,  None, None, 0),
-            ('Bendigo', 'Tax Account',            'Sub-account',          '223 214 867', 'savings',     0.00,     None,  None, None, 0),
-            ('Bendigo', 'Mortgage Loan (PPOR)',   'P&I home loan',        '703 950 915', 'ppor',        -545429.61, None, None, 6.0,  0),
-            ('Bendigo', 'Robina Mortgage',        'Investment property',  '703 952 259', 'loan_investment',        -363533.74, None, None, 6.0,  1),
-            ('Bendigo', 'Nundah Mortgage',        'Investment property',  '703 952 309', 'loan_investment',        -405400.00, None, None, 6.0,  1),
-        ]
-        latitude = [
-            ('Latitude', 'Gem Visa', '6010 ···· 8259', '6010 7320 0426 8259', 'credit', -14549.64, 450.36, 15000, 28.49, 0),
-        ]
-        for a in bendigo + latitude:
-            conn.execute(
-                'INSERT INTO accounts (bank, name, nickname, account_number, type, '
-                'balance, available, credit_limit, interest_rate, is_deductible) '
-                'VALUES (?,?,?,?,?,?,?,?,?,?)', a
-            )
+    The dashboard now ships with no demo data. Users start with an empty
+    database and add their own accounts via the UI. This is the right
+    behaviour for a public repository.
 
-        # Seed the interest-free plans observed in the Latitude statement
-        gem_visa_id = conn.execute("SELECT id FROM accounts WHERE name='Gem Visa'").fetchone()['id']
-        plans = [
-            ('Penrith Auto',                'Started 20 Mar', 1529.87, 1529.87, None, '2026-10-18', 29.99),
-            ('Pandora purchase',            'Started 28 Oct', 559.17,  559.17,  None, '2026-05-18', 29.99),
-            ('December purchase',           'Started 5 Jan',  270.00,  270.00,  None, '2026-07-18', 29.99),
-            ('February purchase',           'Started 1 Mar',  648.45,  648.45,  None, '2026-09-18', 29.99),
-            ('Harvey Norman (electrical)',  '33 mths min',    2601.00, 2586.00, None, '2026-09-26', 29.99),
-            ('Harvey Norman (computer)',    '$86.12/mo',      3100.00, 1291.48, 86.12, '2027-07-14', 29.99),
-            ('Amazon (small)',              '$5.83/mo',       69.99,   17.52,   5.83, '2026-06-29', 29.99),
-            ('Amazon (larger)',             '$43.43/mo',      521.12,  130.25,  43.43, '2026-07-01', 29.99),
-        ]
-        for p in plans:
-            conn.execute(
-                'INSERT INTO interest_free_plans (account_id, name, detail, starting_balance, '
-                'current_balance, monthly_payment, expiry_date, expired_rate) '
-                'VALUES (?,?,?,?,?,?,?,?)',
-                (gem_visa_id,) + p
-            )
+    Anyone running an older install with seeded demo data can use the
+    cleanup tool at /admin/cleanup to remove it.
+    """
+    return
 
 
 def main():

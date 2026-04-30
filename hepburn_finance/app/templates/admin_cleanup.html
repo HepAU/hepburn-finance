@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>Clear demo data</h1>
+      <p>One-shot cleanup for the seed data the dashboard installed in v0.1.x. Safe to skip if your data is already real.</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('main.dashboard') }}">← Back to dashboard</a>
+  </div>
+
+  {% if not seed.has_any %}
+  <div class="form-card" style="text-align: center; padding: 40px 20px;">
+    <h2 style="margin-top: 0;">Nothing to clean up</h2>
+    <p>No demo seed data detected — your dashboard is already running on real data.</p>
+    <p style="color: var(--text-3); font-size: 13px; margin-top: 24px;">
+      The cleanup tool looks for accounts named like the original seed (Card Account,
+      Mortgage Loan (PPOR), Gem Visa, etc) and Latitude interest-free plans
+      (Pandora purchase, Penrith Auto, etc). If you renamed any of those, they won't
+      be detected here.
+    </p>
+  </div>
+  {% else %}
+
+  <form method="POST" class="form-card">
+    <h2>What's currently in the database</h2>
+    <p class="form-sub">
+      Choose what to do with each item. Anything you set to <strong>Leave alone</strong>
+      stays exactly as it is.
+    </p>
+
+    {% if seed.accounts %}
+    <div style="margin: 20px 0 12px 0;">
+      <h3 style="font-size: 14px; margin-bottom: 8px;">Seeded accounts ({{ seed.accounts|length }})</h3>
+      <p class="form-hint" style="margin-top: 0;">
+        These accounts were created automatically. If you've been using one as a real account
+        (uploading CSVs, etc.), keep it. Otherwise it's safe to remove.
+      </p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      {% for a in seed.accounts %}
+      <div style="background: var(--bg-1); padding: 14px 16px; border-radius: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+          <div>
+            <div style="font-weight: 600;">{{ a.name }}</div>
+            <div style="font-size: 12px; color: var(--text-3); margin-top: 2px;">
+              {{ a.bank }} · {{ a.type }} ·
+              {% if a.computed_balance is defined %}{{ a.computed_balance }}{% else %}{% set bal = a.opening_balance if a.opening_balance is not none else a.balance %}${{ '%.2f' | format(bal) }}{% endif %} ·
+              {{ a.tx_count }} transaction{{ '' if a.tx_count == 1 else 's' }}
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px;">
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="radio" name="action_{{ a.id }}" value="keep" checked>
+            Leave alone
+          </label>
+          {% if a.tx_count > 0 %}
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--amber);">
+            <input type="radio" name="action_{{ a.id }}" value="wipe_tx">
+            Keep account, wipe transactions
+          </label>
+          {% endif %}
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--red);">
+            <input type="radio" name="action_{{ a.id }}" value="remove">
+            Remove account + everything in it
+          </label>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if seed.plans %}
+    <div style="margin: 28px 0 12px 0;">
+      <h3 style="font-size: 14px; margin-bottom: 8px;">Seeded interest-free plans ({{ seed.plans|length }})</h3>
+      <p class="form-hint" style="margin-top: 0;">
+        These were added based on Latitude statement data from the original install. If your real Gem Visa statement has different plans, remove these.
+      </p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      {% for p in seed.plans %}
+      <div style="background: var(--bg-1); padding: 14px 16px; border-radius: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+          <div>
+            <div style="font-weight: 600;">{{ p.name }}</div>
+            <div style="font-size: 12px; color: var(--text-3); margin-top: 2px;">
+              ${{ '%.2f' | format(p.current_balance) }} outstanding · expires {{ p.expiry_date }}
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px;">
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="radio" name="plan_{{ p.id }}" value="keep" checked>
+            Leave alone
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--red);">
+            <input type="radio" name="plan_{{ p.id }}" value="remove">
+            Remove plan
+          </label>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div style="background: rgba(224,85,85,0.08); border-left: 3px solid var(--red); padding: 14px 16px; border-radius: 4px; margin-top: 24px;">
+      <p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 600; color: var(--red);">
+        Confirm before proceeding
+      </p>
+      <p class="form-hint" style="margin-top: 0; margin-bottom: 12px;">
+        Removing accounts and transactions can't be undone. Type <strong>DELETE</strong> exactly to enable the action.
+      </p>
+      <input type="text" name="confirm" placeholder="Type DELETE to confirm" required style="width: 100%; max-width: 300px;">
+    </div>
+
+    <div class="form-actions">
+      <a class="btn ghost" href="{{ url_for('main.dashboard') }}">Cancel</a>
+      <button type="submit" class="btn primary">Apply selections</button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
