@@ -2,6 +2,14 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.7] — 2026-05-02
+
+### Added
+- **"Show uncategorised only" toggle on the transactions page.** A prominent pill above the filter form shows the count of unreviewed transactions and toggles in-or-out of uncategorised-only view. Uses an amber dot when transactions need attention, switches to "✓ All transactions are categorised" when zero. The filter combines correctly with account/category/search filters and is preserved across edit→save→list redirects (so you can grind through the queue without losing your place).
+
+### How "uncategorised" is determined
+A transaction is considered uncategorised when its category is NULL/empty/'Uncategorised' AND `user_categorised` is 0 or NULL. So once you manually tag a transaction (even back to "Uncategorised" deliberately), it disappears from this view — the user_categorised flag means "user has reviewed this".
+
 ## [0.6.6] — 2026-05-02
 
 ### Added

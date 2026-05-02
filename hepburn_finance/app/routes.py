@@ -670,6 +670,7 @@ def list_transactions():
     q = request.args.get('q', '').strip()
     cat = request.args.get('cat', '').strip()
     aid = request.args.get('account', '').strip()
+    uncat = request.args.get('uncat', '').strip() == '1'
 
     sql = ("SELECT t.*, a.name AS account_name "
            "FROM transactions t JOIN accounts a ON t.account_id = a.id "
@@ -687,6 +688,11 @@ def list_transactions():
             params.append(int(aid))
         except ValueError:
             pass
+    if uncat:
+        # Show only transactions with no category, blank category, or default
+        # 'Uncategorised', AND not yet manually tagged by the user.
+        sql += (" AND (t.category IS NULL OR t.category = '' OR t.category = 'Uncategorised') "
+                "AND (t.user_categorised = 0 OR t.user_categorised IS NULL)")
     sql += " ORDER BY t.date DESC, t.id DESC LIMIT 200"
 
     with get_db() as conn:
@@ -694,13 +700,20 @@ def list_transactions():
         accounts = conn.execute(
             "SELECT id, name, bank FROM accounts WHERE archived=0 ORDER BY bank, name"
         ).fetchall()
+        # Count of uncategorised transactions overall (for the toggle button label)
+        uncat_count = conn.execute(
+            "SELECT COUNT(*) FROM transactions "
+            "WHERE (category IS NULL OR category = '' OR category = 'Uncategorised') "
+            "AND (user_categorised = 0 OR user_categorised IS NULL)"
+        ).fetchone()[0]
 
     return render_template(
         'transactions.html',
         transactions=[dict(t) for t in txs],
         accounts=accounts,
         categories=_all_categories(),
-        q=q, cat=cat, aid=aid,
+        q=q, cat=cat, aid=aid, uncat=uncat,
+        uncat_count=uncat_count,
     )
 
 
@@ -1088,9 +1101,9 @@ def edit_transaction(tid):
                          f'Pattern: "{like_pattern}" → {new_category}')
                     )
 
-            # Preserve any list filters the user came from (account, category, search)
+            # Preserve any list filters the user came from (account, category, search, uncat)
             filter_args = {}
-            for key in ('account', 'cat', 'q'):
+            for key in ('account', 'cat', 'q', 'uncat'):
                 val = request.form.get(f'_filter_{key}', '').strip()
                 if val:
                     filter_args[key] = val
@@ -1123,6 +1136,7 @@ def edit_transaction(tid):
         'account': request.args.get('account', '').strip(),
         'cat': request.args.get('cat', '').strip(),
         'q': request.args.get('q', '').strip(),
+        'uncat': request.args.get('uncat', '').strip(),
     }
 
     return render_template(
@@ -1150,7 +1164,7 @@ def delete_transaction(tid):
             conn.execute('DELETE FROM transactions WHERE id=?', (pair_id,))
     # Preserve filters from the originating list view (passed as form fields)
     filter_args = {}
-    for key in ('account', 'cat', 'q'):
+    for key in ('account', 'cat', 'q', 'uncat'):
         val = request.form.get(f'_filter_{key}', '').strip()
         if val:
             filter_args[key] = val

@@ -17,7 +17,32 @@
     <a class="btn ghost" href="{{ url_for('main.dashboard') }}">← Back to dashboard</a>
   </div>
 
+  {# Quick-filter toggles. The Uncategorised pill is the primary "give me work to do"
+     surface — it shows the count of unreviewed transactions and toggles in/out. #}
+  <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;">
+    {% if uncat %}
+    <a href="{{ url_for('main.list_transactions', q=q, cat=cat, account=aid) }}"
+       class="filter-pill active"
+       style="background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber); padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+      ✓ Showing uncategorised only · <span style="opacity: 0.8;">tap to clear</span>
+    </a>
+    {% else %}
+    <a href="{{ url_for('main.list_transactions', q=q, cat=cat, account=aid, uncat=1) }}"
+       class="filter-pill"
+       style="background: var(--bg-1); color: var(--text-2); border: 1px solid var(--line); padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s;">
+      {% if uncat_count > 0 %}
+        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--amber);"></span>
+        Show uncategorised only · <strong style="color: var(--amber);">{{ uncat_count }}</strong>
+      {% else %}
+        ✓ All transactions are categorised
+      {% endif %}
+    </a>
+    {% endif %}
+  </div>
+
   <form class="form-card" method="GET" style="padding: 14px 16px;">
+    {# Preserve the uncat state when the user submits the filter form #}
+    {% if uncat %}<input type="hidden" name="uncat" value="1">{% endif %}
     <div class="form-grid-2">
       <div class="form-row" style="margin-bottom: 0;">
         <input type="text" name="q" value="{{ q }}" placeholder="Search description...">
@@ -60,7 +85,7 @@
       </thead>
       <tbody>
         {% for t in transactions %}
-        <tr class="tx-row{% if t.is_internal_transfer %} tx-internal{% endif %}" onclick="window.location='{{ url_for('main.edit_transaction', tid=t.id, account=aid, cat=cat, q=q) }}'">
+        <tr class="tx-row{% if t.is_internal_transfer %} tx-internal{% endif %}" onclick="window.location='{{ url_for('main.edit_transaction', tid=t.id, account=aid, cat=cat, q=q, uncat=('1' if uncat else '')) }}'">
           <td class="tx-date">{{ t.date }}</td>
           <td class="tx-desc-cell">
             {{ t.description }}
