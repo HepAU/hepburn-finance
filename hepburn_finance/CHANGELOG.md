@@ -2,6 +2,16 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.2] — 2026-05-02
+
+Tiny but real fix: the dashboard had no nav to `/budgets/new` from a fresh state.
+
+### Added
+- **+ Budget button** in the dashboard top action bar, alongside + Transaction, + Afterpay, + Transfer, + Add bill. Direct one-click route to create your first budget without needing a Smart Suggestion to fire or knowing the URL.
+
+### Note
+The "Manage →" link on the Spending budgets card already existed but was hidden when no budgets were present (chicken-and-egg). The action bar button solves that.
+
 ## [0.6.1] — 2026-05-02
 
 Closing the loop on smart suggestions. The action buttons in the Smart Suggestions panel now actually do something — previously they were styled like buttons but didn't link anywhere.
