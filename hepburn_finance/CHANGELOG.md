@@ -2,6 +2,17 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.3] — 2026-05-02
+
+Hotfix: calendar was broken once any spending budget existed.
+
+### Fixed
+- **Calendar rendered as empty (no dates, no pills, no balances) when budgets were active.** Root cause: the `/api/forecast` endpoint was hard-accessing `i['id']` on every instance, but budget-drain instances don't carry an id. That raised `KeyError`, the API returned 500, the JS fetch failed silently, and the calendar's render data stayed null.
+- Now using `.get()` for optional fields (id, category, recurring) so budget instances pass through cleanly.
+
+### Visible result
+After updating, the calendar will render again with the dashed amber budget pills appearing on future days as designed.
+
 ## [0.6.2] — 2026-05-02
 
 Tiny but real fix: the dashboard had no nav to `/budgets/new` from a fresh state.
