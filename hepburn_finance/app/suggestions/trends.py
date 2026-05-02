@@ -114,8 +114,6 @@ def category_trend_suggestions(today=None):
 
     out = []
     direction = 'up' if biggest['delta_dollars'] > 0 else 'down'
-    from urllib.parse import quote
-    cat_qs = quote(biggest['category'])
     if direction == 'up':
         out.append({
             'icon': '📈',
@@ -126,7 +124,8 @@ def category_trend_suggestions(today=None):
             'reasoning': (f'That\'s ${biggest["delta_dollars"]:+.0f} more this month than your usual. '
                           f'Worth a quick look at what drove it.'),
             'action': 'See transactions',
-            'action_url': f'/transactions?cat={cat_qs}',
+            'action_endpoint': 'main.list_transactions',
+            'action_kwargs': {'cat': biggest['category']},
             'kind': 'trend_up',
         })
     else:
@@ -139,7 +138,8 @@ def category_trend_suggestions(today=None):
             'reasoning': (f'Recent: ${biggest["recent"]:.0f}. Prior 30-day avg: ${biggest["baseline_30d"]:.0f}. '
                           f'Whatever you\'re doing, keep doing it.'),
             'action': 'See transactions',
-            'action_url': f'/transactions?cat={cat_qs}',
+            'action_endpoint': 'main.list_transactions',
+            'action_kwargs': {'cat': biggest['category']},
             'kind': 'trend_down',
         })
 

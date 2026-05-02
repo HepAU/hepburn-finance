@@ -35,7 +35,8 @@ def interest_free_plan_suggestions(today=None):
                 'reasoning': ('If unpaid by then, the balance rolls onto the Expired Plan Rate '
                               '(typically 29.99%). Worth scheduling a payment now.'),
                 'action': 'Schedule payment',
-                'action_url': '/plans',
+                'action_endpoint': 'main.list_plans',
+                'action_kwargs': {},
                 'kind': 'plan_expiry',
             })
 

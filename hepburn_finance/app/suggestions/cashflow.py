@@ -59,7 +59,8 @@ def cashflow_suggestions(account_ids, today=None):
             'reasoning': (f'Forecast hits ${lowest:,.2f} that day — this restores '
                           f'the buffer above ${AMBER_FLOOR}.'),
             'action': 'Plan transfer',
-            'action_url': f'/transfers/new?from_account_id={source["id"]}&amount={need_rounded}',
+            'action_endpoint': 'main.new_transfer',
+            'action_kwargs': {'from_account_id': source['id'], 'amount': need_rounded},
             'kind': 'cashflow_transfer_in',
         })
     else:
@@ -71,7 +72,8 @@ def cashflow_suggestions(account_ids, today=None):
                           'Options: defer non-critical bills, request a payment plan, '
                           'or use offset funds if available.'),
             'action': 'Review options',
-            'action_url': '/transactions',
+            'action_endpoint': 'main.list_transactions',
+            'action_kwargs': {},
             'kind': 'cashflow_gap',
         })
 
@@ -137,7 +139,8 @@ def bill_clustering_suggestions(account_ids, today=None):
                           f'Quick wins: call {biggest["name"]} (largest at ${abs(biggest["amount"]):,.0f}) '
                           f'to shift its debit by 5-7 days, or pre-load the account with a transfer.'),
             'action': 'Plan it',
-            'action_url': '/transfers/new',
+            'action_endpoint': 'main.new_transfer',
+            'action_kwargs': {},
             'kind': 'bill_cluster',
         })
 

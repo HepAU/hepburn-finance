@@ -120,8 +120,8 @@
           {{ s.text|safe }}
           <span class="reasoning">{{ s.reasoning }}</span>
         </div>
-        {% if s.action_url %}
-        <a class="suggestion-action" href="{{ s.action_url }}">{{ s.action }}</a>
+        {% if s.action_endpoint %}
+        <a class="suggestion-action" href="{{ url_for(s.action_endpoint, **(s.action_kwargs or {})) }}">{{ s.action }}</a>
         {% else %}
         <button class="suggestion-action" disabled>{{ s.action }}</button>
         {% endif %}
@@ -164,13 +164,13 @@
 
   {% if budgets_status %}
   <!-- Spending budgets -->
-  <div class="form-card" style="margin-bottom: 32px;">
+  <div class="budgets-card">
     <div class="assist-head" style="margin-bottom: 16px;">
       <div class="ai-mark">$</div>
       <h2>Spending budgets</h2>
       <a href="{{ url_for('main.list_budgets') }}" style="font-size: 12px; color: var(--text-3); text-decoration: none; margin-left: auto;">Manage →</a>
     </div>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
       {% for b in budgets_status %}
       <a href="{{ url_for('main.edit_budget', bid=b.budget_id) }}" style="display: block; text-decoration: none; color: inherit; background: var(--bg-1); padding: 14px; border-radius: 8px;">
         <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px;">

@@ -788,6 +788,15 @@ a.suggestion-action {
   max-width: 600px;
   margin: 0 auto;
 }
+
+/* Budgets dashboard card — full width, unlike form-card. */
+.budgets-card {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 32px;
+}
 .form-card h2 {
   font-size: 22px; font-weight: 600;
   margin-bottom: 4px; letter-spacing: -0.02em;

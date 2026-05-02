@@ -2,6 +2,18 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.4] — 2026-05-02
+
+Three bug fixes from real-world usage.
+
+### Fixed
+- **Smart suggestion action buttons no longer 404 under HA Ingress.** Previously the buttons emitted absolute paths like `/transactions` which resolved to Home Assistant root (404) rather than the addon's ingress-prefixed URL. Now suggestions emit endpoint name + kwargs and the dashboard template uses Flask's `url_for` to build the correct URL — works both bare and under any Ingress path.
+- **Debt attack order now reflects real-time balances.** Previously the debt list pulled from the legacy `balance` column, so informal-loan repayments posted via the transfer-with-destination flow (e.g. paying back Keith Howieson) showed in the account card but not in the debt attack list. Now uses `computed_balance` (opening_balance + transactions sum) consistently — same source of truth as everywhere else.
+- **Spending budgets card now spans full width.** Was inheriting `.form-card` styling which capped width at 600px and centred it. Now uses a dedicated `.budgets-card` style that fills the available width — fits more budgets across without scrolling.
+
+### Note
+The action-button fix means existing suggestions in your dashboard will need a fresh page load to pick up the corrected URLs. After the addon update, refresh the dashboard once and the buttons will work.
+
 ## [0.6.3] — 2026-05-02
 
 Hotfix: calendar was broken once any spending budget existed.

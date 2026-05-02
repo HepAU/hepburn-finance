@@ -111,9 +111,16 @@ def debt_attack_order():
     3. Other expiring plans
     4. PPOR mortgage
     5. Investment loan principal (deductible — lowest priority for extra repayments)
+
+    All account balances come from `hydrate_accounts()` so that informal-loan
+    repayments posted via the transfer-with-destination flow correctly reduce
+    the displayed debt (computed_balance), instead of using the stale legacy
+    `balance` column.
     """
     today = date.today()
     items = []
+
+    from app.balances import hydrate_accounts
 
     # Plans expiring < 30d
     with get_db() as conn:
@@ -131,10 +138,15 @@ def debt_attack_order():
             "ORDER BY expiry_date ASC"
         ).fetchall()
 
-        accounts = conn.execute(
-            "SELECT * FROM accounts WHERE archived=0 AND balance < 0 "
+        # Pull all archived=0 accounts; we'll filter by computed_balance < 0 after hydrating
+        all_account_rows = conn.execute(
+            "SELECT * FROM accounts WHERE archived=0 "
             "ORDER BY interest_rate DESC NULLS LAST"
         ).fetchall()
+
+    hydrated = hydrate_accounts(all_account_rows)
+    # Negative computed_balance = debt
+    accounts = [a for a in hydrated if a['computed_balance'] < 0]
 
     rank = 1
     for p in urgent_plans:
@@ -163,7 +175,7 @@ def debt_attack_order():
                 'SELECT COALESCE(SUM(current_balance), 0) AS t FROM interest_free_plans WHERE account_id=?',
                 (acc['id'],)
             ).fetchone()
-        outside = abs(acc['balance']) - (plan_total['t'] or 0)
+        outside = abs(acc['computed_balance']) - (plan_total['t'] or 0)
         if outside > 100:
             rate = acc['interest_rate'] or 28.49
             items.append({
@@ -195,16 +207,13 @@ def debt_attack_order():
     for acc in accounts:
         if acc['type'] == 'ppor':
             rate = acc['interest_rate']
-            if rate is None:
-                rate_str = '~6.0% *'
-            else:
-                rate_str = f'{rate:.1f}%'
+            rate_str = f'{rate:.1f}%' if rate is not None else '~6.0% *'
             items.append({
                 'rank': rank,
                 'priority': 3,
                 'name': acc['name'],
                 'detail': 'Owner-occupier — non-deductible interest',
-                'amount': acc['balance'],
+                'amount': acc['computed_balance'],
                 'rate': rate_str,
                 'rate_class': 'cool',
             })
@@ -214,16 +223,13 @@ def debt_attack_order():
     for acc in accounts:
         if acc['type'] == 'loan_personal':
             rate = acc['interest_rate']
-            if rate is None:
-                rate_str = '—'
-            else:
-                rate_str = f'{rate:.1f}%'
+            rate_str = f'{rate:.1f}%' if rate is not None else '—'
             items.append({
                 'rank': rank,
                 'priority': 3,
                 'name': acc['name'],
                 'detail': 'Personal loan — non-deductible interest',
-                'amount': acc['balance'],
+                'amount': acc['computed_balance'],
                 'rate': rate_str,
                 'rate_class': 'cool',
             })
@@ -233,16 +239,13 @@ def debt_attack_order():
     for acc in accounts:
         if acc['type'] == 'loan_investment':
             rate = acc['interest_rate']
-            if rate is None:
-                rate_str = '~6.0% *'
-            else:
-                rate_str = f'{rate:.1f}%'
+            rate_str = f'{rate:.1f}%' if rate is not None else '~6.0% *'
             items.append({
                 'rank': rank,
                 'priority': 3,
                 'name': acc['name'],
                 'detail': 'Investment property — <strong>tax deductible interest</strong>',
-                'amount': acc['balance'],
+                'amount': acc['computed_balance'],
                 'rate': rate_str,
                 'rate_class': 'deductible',
             })
@@ -261,7 +264,7 @@ def debt_attack_order():
                 'priority': 4,
                 'name': acc['name'],
                 'detail': 'Informal — owed to family / friend / work',
-                'amount': acc['balance'],
+                'amount': acc['computed_balance'],
                 'rate': rate_str,
                 'rate_class': 'informal',
             })

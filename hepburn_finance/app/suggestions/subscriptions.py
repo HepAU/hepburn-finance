@@ -174,7 +174,8 @@ def subscription_audit_suggestions(today=None):
                           f'Worth a quarterly audit — at ${total_monthly * 12:.0f}/year, '
                           f'cancelling 1-2 unused ones is meaningful money.'),
             'action': 'Review subs',
-            'action_url': '/transactions?cat=Subscriptions',
+            'action_endpoint': 'main.list_transactions',
+            'action_kwargs': {'cat': 'Subscriptions'},
             'kind': 'subscription_audit',
         })
 
@@ -191,7 +192,8 @@ def subscription_audit_suggestions(today=None):
             'reasoning': (f'{names}{more_text} — last charge was 60+ days ago but '
                           f'still recurring. Either cancel or move to annual billing for a discount.'),
             'action': 'Cancel idle',
-            'action_url': '/transactions?cat=Subscriptions',
+            'action_endpoint': 'main.list_transactions',
+            'action_kwargs': {'cat': 'Subscriptions'},
             'kind': 'subscription_stale',
         })
 
