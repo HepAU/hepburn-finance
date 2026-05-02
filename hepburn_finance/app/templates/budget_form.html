@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>{% if budget %}Edit budget{% else %}New budget{% endif %}</h1>
+      <p>Set a recurring spending cap for a category.</p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('main.list_budgets') }}">← All budgets</a>
+  </div>
+
+  {% if not budget and not accounts %}
+  <div class="form-card">
+    <h2 style="margin-top: 0;">No accounts yet</h2>
+    <p>You need at least one transaction or credit account before adding a budget.</p>
+    <p style="margin-top: 16px;">
+      <a class="btn primary" href="{{ url_for('main.new_account') }}">+ Add an account</a>
+    </p>
+  </div>
+  {% else %}
+  <form class="form-card" method="POST">
+    <h2>{% if budget %}{{ budget.name }}{% else %}New budget{% endif %}</h2>
+
+    <div class="form-row">
+      <label>Name</label>
+      <input type="text" name="name"
+        value="{{ budget.name if budget else prefill.name }}"
+        placeholder="e.g. Weekly groceries, Fun money" required>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Category</label>
+        <input type="text" name="category" list="category-list" required
+          value="{{ budget.category if budget else prefill.category }}"
+          placeholder="e.g. Food · Groceries">
+        <datalist id="category-list">
+          {% for c in categories %}<option value="{{ c }}">{% endfor %}
+        </datalist>
+        <p class="form-hint" style="margin-top: 4px;">Real transactions in this category count against the budget.</p>
+      </div>
+      <div class="form-row">
+        <label>Cadence</label>
+        <select name="cadence" required>
+          {% set sel = budget.cadence if budget else prefill.cadence or 'weekly' %}
+          <option value="weekly" {% if sel == 'weekly' %}selected{% endif %}>Weekly (Mon–Sun)</option>
+          <option value="fortnightly" {% if sel == 'fortnightly' %}selected{% endif %}>Fortnightly</option>
+          <option value="monthly" {% if sel == 'monthly' %}selected{% endif %}>Monthly (calendar month)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-grid-2">
+      <div class="form-row">
+        <label>Amount per period ($)</label>
+        <input type="number" name="amount" step="0.01" min="0" required
+          value="{{ budget.amount if budget else prefill.amount }}"
+          placeholder="e.g. 300">
+      </div>
+      <div class="form-row">
+        <label>Account this hits</label>
+        <select name="account_id" required>
+          <option value="" disabled {% if not budget %}selected{% endif %}>Choose…</option>
+          {% for a in accounts %}
+          <option value="{{ a.id }}"
+            {% if budget and budget.account_id == a.id %}selected{% endif %}>
+            {{ a.bank }} · {{ a.name }}
+          </option>
+          {% endfor %}
+        </select>
+        <p class="form-hint" style="margin-top: 4px;">Tells the forecast which balance this drains from.</p>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label>Notes <span class="form-hint">(optional)</span></label>
+      <textarea name="notes" rows="2" placeholder="Anything to remember">{{ budget.notes if budget and budget.notes else '' }}</textarea>
+    </div>
+
+    {% if budget %}
+    <div class="form-row checkbox-row">
+      <input type="checkbox" name="active" id="active" {% if budget.active %}checked{% endif %}>
+      <label for="active">Active (uncheck to pause without deleting)</label>
+    </div>
+    {% endif %}
+
+    <div class="form-actions">
+      <div>
+        {% if budget %}
+        <form method="POST" action="{{ url_for('main.delete_budget', bid=budget.id) }}" style="display:inline;"
+          onsubmit="return confirm('Delete this budget permanently?');">
+          <button type="submit" class="btn danger">Delete</button>
+        </form>
+        {% endif %}
+      </div>
+      <div class="form-actions-right">
+        <a class="btn ghost" href="{{ url_for('main.list_budgets') }}">Cancel</a>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

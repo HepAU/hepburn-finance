@@ -265,8 +265,14 @@ def forecast_daily_balances(account_ids, days_ahead=30, today=None):
     Returns (balances_dict, starting_balance, all_instances)
       balances_dict: {iso_date: running_balance}
       starting_balance: spendable cash today (uses available, falls back to balance)
-      all_instances: every bill + transfer instance with kind set so the
+      all_instances: every bill + transfer + budget-drain instance with kind set so the
                      calendar can render them differently.
+
+    Spending budgets (v0.6.0+) are folded in as smooth daily drains across each
+    period. Drains hit only the accounts in `account_ids` if the budget targets
+    one of them. As real transactions in the budget's category land, the
+    "remaining" portion of the budget drops, so the forecast self-corrects on
+    each rebuild.
     """
     if today is None:
         today = date.today()
@@ -275,6 +281,7 @@ def forecast_daily_balances(account_ids, days_ahead=30, today=None):
 
     bill_instances = expand_bills(today, end, account_ids)
     transfer_instances = expand_transfers(today, end, account_ids)
+    budget_instances = _expand_budgets(today, end, account_ids)
 
     effects = {}
     for b in bill_instances:
@@ -282,6 +289,8 @@ def forecast_daily_balances(account_ids, days_ahead=30, today=None):
     for t in transfer_instances:
         if t['net_effect'] not in (None, 0):
             effects.setdefault(t['date'], []).append(t['net_effect'])
+    for bu in budget_instances:
+        effects.setdefault(bu['date'], []).append(bu['amount'])
 
     balances = {}
     running = starting
@@ -292,7 +301,54 @@ def forecast_daily_balances(account_ids, days_ahead=30, today=None):
         balances[cursor.isoformat()] = round(running, 2)
         cursor += timedelta(days=1)
 
-    all_instances = bill_instances + [t for t in transfer_instances if t['net_effect'] is not None]
+    all_instances = (
+        bill_instances
+        + [t for t in transfer_instances if t['net_effect'] is not None]
+        + budget_instances
+    )
     all_instances.sort(key=lambda i: (i['date'], i.get('name', '')))
 
     return balances, starting, all_instances
+
+
+def _expand_budgets(from_date, to_date, account_ids):
+    """Generate per-day budget-drain instances within the date range.
+
+    Only includes budgets whose account_id is in account_ids (so the forecast
+    only drains accounts the user is currently looking at).
+    """
+    from app.budgets import get_active_budgets, projected_drain_for_day
+
+    if not account_ids:
+        return []
+    selected = set(account_ids)
+
+    with get_db() as conn:
+        budgets = conn.execute(
+            "SELECT b.*, a.name AS account_name "
+            "FROM spending_budgets b "
+            "LEFT JOIN accounts a ON b.account_id = a.id "
+            "WHERE b.active = 1 AND b.account_id IS NOT NULL"
+        ).fetchall()
+    budgets = [dict(b) for b in budgets if b['account_id'] in selected]
+    if not budgets:
+        return []
+
+    today = date.today()
+    instances = []
+    for budget in budgets:
+        cursor = max(from_date, today + timedelta(days=1))
+        while cursor <= to_date:
+            drain = projected_drain_for_day(budget, cursor, today=today)
+            if drain > 0:
+                instances.append({
+                    'date': cursor,
+                    'name': budget['name'],
+                    'amount': -round(drain, 2),
+                    'category': budget['category'],
+                    'recurring': f'{budget["cadence"]} budget',
+                    'kind': 'budget',
+                    'account_name': budget.get('account_name'),
+                })
+            cursor += timedelta(days=1)
+    return instances

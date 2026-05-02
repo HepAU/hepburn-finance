@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>Spending budgets</h1>
+      <p>Weekly, fortnightly, or monthly limits for discretionary categories. Forecast accounts for them automatically.</p>
+    </div>
+    <div class="top-actions">
+      <a class="btn ghost" href="{{ url_for('main.dashboard') }}">← Back to dashboard</a>
+      <a class="btn primary" href="{{ url_for('main.new_budget') }}">+ Add budget</a>
+    </div>
+  </div>
+
+  {% if not budgets %}
+  <div class="form-card" style="text-align: center; padding: 40px 20px;">
+    <h2 style="margin-top: 0;">No budgets yet</h2>
+    <p>Set a weekly amount for groceries, petrol, takeaway, fun money — anything where you want a visible cap.</p>
+    <p style="margin-top: 20px;">
+      <a class="btn primary" href="{{ url_for('main.new_budget') }}">+ Add your first budget</a>
+    </p>
+  </div>
+  {% else %}
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    {% for b in budgets %}
+    <a href="{{ url_for('main.edit_budget', bid=b.id) }}" class="form-card" style="display: block; text-decoration: none; color: inherit; padding: 16px 18px;
+        {% if not b.active %}opacity: 0.5;{% endif %}">
+      <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 8px;">
+        <div>
+          <div style="font-weight: 600; font-size: 16px;">{{ b.name }}</div>
+          <div style="font-size: 12px; color: var(--text-3); margin-top: 2px;">
+            {{ b.category }} · {{ b.cadence }}{% if b.account_name %} · {{ b.account_name }}{% endif %}
+            {% if not b.active %} · <em>inactive</em>{% endif %}
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 20px; font-weight: 600; font-feature-settings: 'tnum';">
+            ${{ '{:,.0f}'.format(b.amount) }}
+          </div>
+          {% if b.status %}
+          <div style="font-size: 11px; color: var(--text-3);">
+            ${{ '%.0f'|format(b.status.spent) }} spent · ${{ '%.0f'|format(b.status.remaining) }} left
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% if b.status %}
+      <div style="height: 6px; background: var(--bg-2); border-radius: 3px; overflow: hidden;">
+        <div style="height: 100%;
+            width: {{ b.status.pct_used }}%;
+            background: {% if b.status.over_budget %}var(--red){% elif b.status.pct_used >= 80 %}var(--amber){% else %}var(--green){% endif %};
+            transition: width 0.3s ease;"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--text-3);">
+        <span>
+          {% if b.status.over_budget %}
+            Over by ${{ '%.0f'|format(b.status.spent - b.status.amount) }}
+          {% else %}
+            {{ b.status.pct_used }}% used
+          {% endif %}
+        </span>
+        <span>{{ b.status.days_remaining }} day{{ '' if b.status.days_remaining == 1 else 's' }} left in period</span>
+      </div>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

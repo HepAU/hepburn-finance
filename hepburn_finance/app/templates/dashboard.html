@@ -157,6 +157,38 @@
     </div>
   </div>
 
+  {% if budgets_status %}
+  <!-- Spending budgets -->
+  <div class="form-card" style="margin-bottom: 32px;">
+    <div class="assist-head" style="margin-bottom: 16px;">
+      <div class="ai-mark">$</div>
+      <h2>Spending budgets</h2>
+      <a href="{{ url_for('main.list_budgets') }}" style="font-size: 12px; color: var(--text-3); text-decoration: none; margin-left: auto;">Manage →</a>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px;">
+      {% for b in budgets_status %}
+      <a href="{{ url_for('main.edit_budget', bid=b.budget_id) }}" style="display: block; text-decoration: none; color: inherit; background: var(--bg-1); padding: 14px; border-radius: 8px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px;">
+          <div style="font-weight: 600; font-size: 14px;">{{ b.name }}</div>
+          <div style="font-size: 13px; font-weight: 600; font-feature-settings: 'tnum';
+              color: {% if b.over_budget %}var(--red){% elif b.pct_used >= 80 %}var(--amber){% else %}var(--green){% endif %};">
+            {% if b.over_budget %}-${{ '%.0f'|format(b.spent - b.amount) }} over{% else %}${{ '%.0f'|format(b.remaining) }} left{% endif %}
+          </div>
+        </div>
+        <div style="height: 6px; background: var(--bg-2); border-radius: 3px; overflow: hidden; margin-bottom: 6px;">
+          <div style="height: 100%; width: {{ b.pct_used }}%;
+              background: {% if b.over_budget %}var(--red){% elif b.pct_used >= 80 %}var(--amber){% else %}var(--green){% endif %};"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3);">
+          <span>${{ '%.0f'|format(b.spent) }} of ${{ '%.0f'|format(b.amount) }} {{ b.cadence }}</span>
+          <span>{{ b.days_remaining }}d left</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Accounts grouped by bank -->
   {% for bank, accs in accounts_by_bank.items() %}
   <div class="account-group">
@@ -496,6 +528,7 @@ function dateKey(y, m, d) {
 }
 
 function eventClass(e) {
+  if (e.kind === 'budget') return 'budget';
   if (e.kind === 'transfer') return 'transfer';
   if (e.is_income || e.amount > 0) return 'income';
   return 'bill';
@@ -535,10 +568,20 @@ function renderCalendar() {
         (CAL_YEAR === TODAY.getFullYear() && CAL_MONTH < TODAY.getMonth()) ||
         (CAL_YEAR === TODAY.getFullYear() && CAL_MONTH === TODAY.getMonth() && day < TODAY.getDate());
 
-      const evHtml = events.slice(0, 2).map(e => {
+      // Separate budget drains from other events — collapse them into a single pill
+      const budgetEvents = events.filter(e => e.kind === 'budget');
+      const nonBudget = events.filter(e => e.kind !== 'budget');
+      const budgetTotal = budgetEvents.reduce((sum, e) => sum + Math.abs(e.amount), 0);
+
+      let evHtml = nonBudget.slice(0, 2).map(e => {
         return `<div class="cal-event ${eventClass(e)}">${e.name}</div>`;
       }).join('');
-      const more = events.length > 2 ? `<div class="cal-event-more">+${events.length-2} more</div>` : '';
+      if (budgetTotal > 0 && nonBudget.length < 2) {
+        evHtml += `<div class="cal-event budget" title="Projected budget drain across ${budgetEvents.length} budget${budgetEvents.length === 1 ? '' : 's'}">~${fmtShort(-budgetTotal)} budget</div>`;
+      }
+      const totalEvents = nonBudget.length + (budgetTotal > 0 ? 1 : 0);
+      const shownEvents = Math.min(2, nonBudget.length) + (budgetTotal > 0 && nonBudget.length < 2 ? 1 : 0);
+      const more = totalEvents > shownEvents ? `<div class="cal-event-more">+${totalEvents - shownEvents} more</div>` : '';
 
       let balHtml = ''; let cellClass = '';
       if (!isPast && FORECAST_DATA && FORECAST_DATA.balances) {

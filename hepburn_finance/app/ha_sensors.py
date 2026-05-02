@@ -184,11 +184,27 @@ def compute_and_push_all():
         }
     )
 
-    # Upcoming bills (14d)
+    # Upcoming bills (14d) — and transfers too, so the popup shows the full
+    # picture of money leaving the selected accounts. Transfers between two
+    # selected accounts net to zero (not shown), but a transfer where only the
+    # source is selected (e.g. mortgage payment to an unselected mortgage
+    # account) reduces the running balance and must appear.
     try:
         bills_14d = expand_bills(today, today + timedelta(days=14), selected_ids)
     except Exception:
         bills_14d = []
+    try:
+        from app.forecast import expand_transfers
+        transfers_14d_raw = expand_transfers(today, today + timedelta(days=14), selected_ids)
+    except Exception:
+        transfers_14d_raw = []
+    # Only include transfers with a non-zero net effect on the selected account set.
+    # net_effect is signed: negative = money leaving, positive = money coming in.
+    transfers_14d = [
+        t for t in transfers_14d_raw
+        if t.get('net_effect') is not None and t['net_effect'] != 0
+    ]
+
     bills_only = [b for b in bills_14d if not b.get('is_income')]
     bills_7d = [b for b in bills_only if (b['date'] - today).days <= 7]
 
@@ -235,16 +251,46 @@ def compute_and_push_all():
             return 'Next week'
         return 'Later'
 
-    grouped = {}
+    # Combine bills + transfers (net-effect outflows) into one grouped list
+    # for the popup. Transfers show as labelled rows with their direction.
+    combined = []
     for b in bills_only[:25]:
-        days_away = (b['date'] - today).days
-        chunk = _chunk_label(days_away)
-        grouped.setdefault(chunk, []).append({
+        combined.append({
             'name': b['name'],
             'amount': round(abs(b['amount']), 2),
-            'date': b['date'].isoformat(),
-            'days_away': days_away,
+            'date': b['date'],
             'category': b.get('category', ''),
+            'kind': 'bill',
+        })
+    for t in transfers_14d[:15]:
+        # net_effect is what hits the selected accounts. Negative = outflow.
+        # The popup is about cash leaving, so we report the absolute outflow.
+        # Skip net-positive (incoming) transfers — those are essentially
+        # internal credits and not the popup's job to surface.
+        net = t.get('net_effect', 0)
+        if net >= 0:
+            continue
+        combined.append({
+            'name': t['name'],
+            'amount': round(abs(net), 2),
+            'date': t['date'],
+            'category': t.get('category', 'Transfer'),
+            'kind': 'transfer',
+        })
+
+    combined.sort(key=lambda x: x['date'])
+
+    grouped = {}
+    for item in combined:
+        days_away = (item['date'] - today).days
+        chunk = _chunk_label(days_away)
+        grouped.setdefault(chunk, []).append({
+            'name': item['name'],
+            'amount': item['amount'],
+            'date': item['date'].isoformat(),
+            'days_away': days_away,
+            'category': item['category'],
+            'kind': item['kind'],
         })
 
     # Order the chunks (so HA template loop is consistent)
@@ -331,6 +377,51 @@ def compute_and_push_all():
             'friendly_name': 'Hepburn · Mortgage redraw available',
             'unit_of_measurement': '$',
             'icon': 'mdi:water-outline',
+        }
+    )
+
+    # Spending budgets summary — for the HA popup
+    from app.budgets import budget_status
+    with get_db() as conn:
+        budget_rows = conn.execute(
+            "SELECT b.*, a.name AS account_name "
+            "FROM spending_budgets b "
+            "LEFT JOIN accounts a ON b.account_id = a.id "
+            "WHERE b.active = 1 ORDER BY b.cadence, b.name"
+        ).fetchall()
+    budgets_data = []
+    total_remaining = 0.0
+    total_amount = 0.0
+    total_spent = 0.0
+    for b in budget_rows:
+        s = budget_status(dict(b), today=today)
+        budgets_data.append({
+            'id': s['budget_id'],
+            'name': s['name'],
+            'category': s['category'],
+            'cadence': s['cadence'],
+            'amount': s['amount'],
+            'spent': s['spent'],
+            'remaining': s['remaining'],
+            'pct_used': s['pct_used'],
+            'days_remaining': s['days_remaining'],
+            'over_budget': s['over_budget'],
+        })
+        total_amount += s['amount']
+        total_spent += s['spent']
+        total_remaining += s['remaining']
+
+    push_sensor(
+        'hepburn_finance_budgets_remaining',
+        round(total_remaining, 2),
+        {
+            'friendly_name': 'Hepburn · Budget remaining (current period)',
+            'unit_of_measurement': '$',
+            'icon': 'mdi:wallet-outline',
+            'count': len(budgets_data),
+            'total_amount': round(total_amount, 2),
+            'total_spent': round(total_spent, 2),
+            'budgets': budgets_data,
         }
     )
 

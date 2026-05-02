@@ -133,6 +133,19 @@ CREATE TABLE IF NOT EXISTS notifications_log (
     body TEXT,
     target TEXT
 );
+
+CREATE TABLE IF NOT EXISTS spending_budgets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    amount REAL NOT NULL,
+    cadence TEXT NOT NULL,
+    account_id INTEGER,
+    notes TEXT,
+    active INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 # Default category rules — seeded on first run, editable via UI
@@ -401,6 +414,24 @@ def run_migrations(conn):
         conn.execute(
             "UPDATE accounts SET balance_last_updated = COALESCE(updated_at, datetime('now'))"
         )
+
+    # 0.6.0: spending_budgets table — weekly/fortnightly/monthly budgets per
+    # category with optional account targeting.
+    if not _table_exists(conn, 'spending_budgets'):
+        conn.execute("""
+            CREATE TABLE spending_budgets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                category TEXT NOT NULL,
+                amount REAL NOT NULL,
+                cadence TEXT NOT NULL,
+                account_id INTEGER,
+                notes TEXT,
+                active INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
 
 
 def init_db():

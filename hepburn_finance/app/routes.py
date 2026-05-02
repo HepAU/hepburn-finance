@@ -205,6 +205,18 @@ def dashboard():
         if a['type'] in ('loan_investment', 'loan_personal', 'ppor', 'loan')
     )
 
+    # Budgets status — for the Spending budgets card
+    from app.budgets import budget_status
+    with get_db() as conn:
+        budget_rows = conn.execute(
+            "SELECT b.*, a.name AS account_name, a.bank AS account_bank "
+            "FROM spending_budgets b "
+            "LEFT JOIN accounts a ON b.account_id = a.id "
+            "WHERE b.active = 1 "
+            "ORDER BY b.cadence, b.name"
+        ).fetchall()
+    budgets_status = [budget_status(dict(b), today=today) for b in budget_rows]
+
     return render_template(
         'dashboard.html',
         today=today.isoformat(),
@@ -228,6 +240,7 @@ def dashboard():
         credit_total=credit_total,
         redraw_total=redraw_total,
         seed_data_present=_detect_seed_data()['has_any'],
+        budgets_status=budgets_status,
     )
 
 
@@ -659,6 +672,117 @@ def list_transactions():
         categories=_all_categories(),
         q=q, cat=cat, aid=aid,
     )
+
+
+# ---------- Spending budget management ----------
+
+@bp.route('/budgets')
+def list_budgets():
+    """Show all spending budgets with current period status."""
+    from app.budgets import get_active_budgets, budget_status
+    with get_db() as conn:
+        budgets_raw = conn.execute(
+            "SELECT b.*, a.name AS account_name, a.bank AS account_bank "
+            "FROM spending_budgets b "
+            "LEFT JOIN accounts a ON b.account_id = a.id "
+            "ORDER BY b.active DESC, b.cadence, b.name"
+        ).fetchall()
+    today = date.today()
+    budgets_with_status = []
+    for b in budgets_raw:
+        d = dict(b)
+        if d['active']:
+            d['status'] = budget_status(d, today=today)
+        else:
+            d['status'] = None
+        budgets_with_status.append(d)
+    return render_template('budgets.html', budgets=budgets_with_status, today=today.isoformat())
+
+
+@bp.route('/budgets/new', methods=['GET', 'POST'])
+def new_budget():
+    if request.method == 'POST':
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO spending_budgets (name, category, amount, cadence, "
+                "account_id, notes, active) VALUES (?,?,?,?,?,?,1)",
+                (
+                    request.form.get('name', '').strip(),
+                    request.form.get('category', '').strip(),
+                    float(request.form.get('amount') or 0),
+                    request.form.get('cadence', 'weekly'),
+                    int(request.form['account_id']) if request.form.get('account_id') else None,
+                    request.form.get('notes', '').strip() or None,
+                ),
+            )
+        return redirect(url_for('main.list_budgets'))
+
+    with get_db() as conn:
+        accounts = conn.execute(
+            "SELECT id, name, bank, type FROM accounts WHERE archived=0 "
+            "AND type IN ('transaction','credit') ORDER BY bank, name"
+        ).fetchall()
+    # Pre-fill from query string if a "Set cap" suggestion is sending us here
+    prefill = {
+        'name': request.args.get('name', '').strip(),
+        'category': request.args.get('category', '').strip(),
+        'amount': request.args.get('amount', '').strip(),
+        'cadence': request.args.get('cadence', 'weekly').strip(),
+    }
+    return render_template(
+        'budget_form.html',
+        budget=None,
+        accounts=[dict(a) for a in accounts],
+        categories=_all_categories(),
+        prefill=prefill,
+    )
+
+
+@bp.route('/budgets/<int:bid>/edit', methods=['GET', 'POST'])
+def edit_budget(bid):
+    with get_db() as conn:
+        budget = conn.execute(
+            'SELECT * FROM spending_budgets WHERE id=?', (bid,)
+        ).fetchone()
+        if not budget:
+            return 'Not found', 404
+
+        if request.method == 'POST':
+            conn.execute(
+                "UPDATE spending_budgets SET name=?, category=?, amount=?, "
+                "cadence=?, account_id=?, notes=?, active=?, "
+                "updated_at=datetime('now') WHERE id=?",
+                (
+                    request.form.get('name', '').strip(),
+                    request.form.get('category', '').strip(),
+                    float(request.form.get('amount') or 0),
+                    request.form.get('cadence', 'weekly'),
+                    int(request.form['account_id']) if request.form.get('account_id') else None,
+                    request.form.get('notes', '').strip() or None,
+                    1 if request.form.get('active') else 0,
+                    bid,
+                ),
+            )
+            return redirect(url_for('main.list_budgets'))
+
+        accounts = conn.execute(
+            "SELECT id, name, bank, type FROM accounts WHERE archived=0 "
+            "AND type IN ('transaction','credit') ORDER BY bank, name"
+        ).fetchall()
+    return render_template(
+        'budget_form.html',
+        budget=dict(budget),
+        accounts=[dict(a) for a in accounts],
+        categories=_all_categories(),
+        prefill={},
+    )
+
+
+@bp.route('/budgets/<int:bid>/delete', methods=['POST'])
+def delete_budget(bid):
+    with get_db() as conn:
+        conn.execute('DELETE FROM spending_budgets WHERE id=?', (bid,))
+    return redirect(url_for('main.list_budgets'))
 
 
 # ---------- Interest-free plan management ----------

@@ -506,6 +506,7 @@ a:hover { text-decoration: underline; }
 .cal-event.bill { background: var(--red-bg); color: var(--red); }
 .cal-event.income { background: var(--green-bg); color: var(--green); }
 .cal-event.transfer { background: var(--blue-bg); color: var(--blue); }
+.cal-event.budget { background: rgba(245,181,68,0.10); color: var(--amber); border: 1px dashed rgba(245,181,68,0.35); opacity: 0.85; }
 .dot.transfer { background: var(--blue); }
 .cal-event-more {
   font-size: 10px; color: var(--text-3);

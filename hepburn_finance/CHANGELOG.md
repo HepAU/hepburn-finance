@@ -2,6 +2,28 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.0] — 2026-05-02
+
+The spending budgets release. A new first-class concept alongside bills and transfers, designed to model the discretionary spend that doesn't fit the "scheduled bill on a specific day" pattern — groceries, fuel, takeaway, fun money. Budgets drain the forecast smoothly across each period, factoring in real spending so you don't get double-counted.
+
+### Added
+- **Spending budgets** — weekly (Mon–Sun), fortnightly, or monthly amounts attached to a category and a target account. CRUD UI at `/budgets` with a list view (progress bars per budget) and add/edit/delete.
+- **Forecast integration** — each future day in a budget's period gets a smoothed daily drain on the target account. As real transactions in the budget's category land, the projected drain shrinks for the rest of the period (so you never double-count).
+- **Calendar visual** — dashed amber pills on future days showing the day's projected budget drain (collapsed into one "~$X budget" pill per day rather than a pill per budget).
+- **Dashboard "Spending budgets" card** — progress bars per budget showing $ spent, $ left, % used, and days remaining in the current period. Bars colour-code green/amber/red as you approach the cap.
+- **HA popup section** — between the cash headline and bills list. Shows each budget with its progress bar and dollars remaining. Hidden if no budgets exist.
+- **HA sensor** `sensor.hepburn_finance_budgets_remaining` — total remaining across all budgets, with `budgets` attribute containing per-budget data for the popup.
+
+### Fixed
+- **HA popup now includes scheduled transfers** alongside bills. Previously: a fortnightly mortgage transfer was missing from the popup, so the running balance under each section was wrong. Now: transfers with a non-zero net effect on selected accounts (e.g. mortgage payments to an unselected mortgage account) appear in their day's section, and the running balance reflects them.
+
+### Schema migration
+- New `spending_budgets` table created automatically. No data loss for existing installs. Forward-compatible.
+
+### Notes
+- Budgets only apply when you select the target account in the dashboard's "include in calendar forecast" view. If the account isn't selected, the budget doesn't show in the forecast (because the forecast is for selected-accounts cash flow).
+- The "Set cap" suggestion button (from v0.5.0's discretionary drift module) currently doesn't auto-create a budget yet — that wiring lands in v0.6.1.
+
 ## [0.5.8] — 2026-05-02
 
 Two bug fixes addressing real workflow friction.
