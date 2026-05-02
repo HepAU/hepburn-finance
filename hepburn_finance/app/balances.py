@@ -24,6 +24,16 @@ def compute_account_balance(account_row, conn=None):
     `account_row` is a sqlite Row (dict-like) with at least: id, opening_balance,
     balance, type, balance_last_updated.
     `conn` may be passed to avoid opening a new connection inside a loop.
+
+    IMPORTANT: This sums ALL transactions, including those marked as
+    `is_internal_transfer`. The reason: opening_balance represents the user's
+    actual bank balance at a point in time, which already reflects every
+    transaction including transfers. Excluding internal transfers from the
+    sum would effectively add them back into the balance — double-correcting
+    and inflating the number.
+
+    The is_internal_transfer flag is used for spending analytics (so
+    transfers don't show up as "spending"), NOT for balance computation.
     """
     aid = account_row['id']
     opening = account_row['opening_balance']
@@ -32,20 +42,19 @@ def compute_account_balance(account_row, conn=None):
         # Pre-migration / not initialised — fall back to manual balance
         return account_row['balance']
 
-    # Sum non-internal transactions since opening
+    # Sum ALL transactions — internal transfers included, since they affect
+    # the real bank balance and opening_balance already reflects them.
     if conn is None:
         with get_db() as conn2:
             tx_sum = conn2.execute(
                 'SELECT COALESCE(SUM(amount), 0) FROM transactions '
-                'WHERE account_id = ? '
-                'AND (is_internal_transfer = 0 OR is_internal_transfer IS NULL)',
+                'WHERE account_id = ?',
                 (aid,)
             ).fetchone()[0]
     else:
         tx_sum = conn.execute(
             'SELECT COALESCE(SUM(amount), 0) FROM transactions '
-            'WHERE account_id = ? '
-            'AND (is_internal_transfer = 0 OR is_internal_transfer IS NULL)',
+            'WHERE account_id = ?',
             (aid,)
         ).fetchone()[0]
 
@@ -63,14 +72,14 @@ def hydrate_accounts(account_rows):
         return out
 
     with get_db() as conn:
-        # Pull all transaction sums in one query to avoid N+1
+        # Pull all transaction sums in one query to avoid N+1.
+        # Includes ALL transactions — see compute_account_balance() docstring.
         ids = [r['id'] for r in account_rows]
         placeholders = ','.join('?' * len(ids))
         rows = conn.execute(
             f'SELECT account_id, COALESCE(SUM(amount), 0) AS s '
             f'FROM transactions '
             f'WHERE account_id IN ({placeholders}) '
-            f'AND (is_internal_transfer = 0 OR is_internal_transfer IS NULL) '
             f'GROUP BY account_id',
             ids
         ).fetchall()

@@ -236,11 +236,12 @@ def get_starting_balance(account_ids):
         for r in rows:
             opening = r['opening_balance']
             if opening is not None:
-                # Has an opening_balance — use computed (transactions-driven)
+                # Has an opening_balance — use computed (transactions-driven).
+                # We count ALL transactions including internal transfers because
+                # opening_balance represents the actual bank balance, which
+                # already reflects them.
                 tx_count = conn.execute(
-                    'SELECT COUNT(*) FROM transactions '
-                    'WHERE account_id = ? '
-                    'AND (is_internal_transfer = 0 OR is_internal_transfer IS NULL)',
+                    'SELECT COUNT(*) FROM transactions WHERE account_id = ?',
                     (r['id'],)
                 ).fetchone()[0]
                 if tx_count > 0:

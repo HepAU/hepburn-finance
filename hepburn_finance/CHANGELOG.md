@@ -2,6 +2,20 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.5.6] — 2026-05-02
+
+Critical bug fix in the balance computation model.
+
+### Fixed
+- **Computed balance no longer double-counts internal transfers.** Previously, the v0.4.0 balance model excluded `is_internal_transfer=1` transactions from the sum. But this was wrong: the user's `opening_balance` already represents the actual bank balance at a point in time, which inherently includes the effect of every transaction — including transfers. By excluding internal transfers from the sum, those amounts were effectively being added back to the displayed balance, inflating it.
+- **Visible symptom this fixes:** computed balance showing $8,000+ when reality is more like $6,000, where the difference equals the sum of internal transfers in the account history.
+
+### Changed
+- `compute_account_balance` and `hydrate_accounts` now sum **all** transactions, including those marked as `is_internal_transfer`. The flag is still used (correctly) for spending analytics and category trends — so transfers don't show as "spending" — but no longer interferes with balance computation.
+
+### Note on internal transfer detection accuracy
+The auto-detector pairs transactions across accounts. If only some accounts are imported, the detector can produce both false negatives (real transfers not detected because the matching leg isn't loaded yet) and rare false positives. Neither affects balance computation any more after this fix, but you may want to use the bulk-edit feature on `/transactions` to clean up obvious mis-tags.
+
 ## [0.5.5] — 2026-05-02
 
 Hotfix for v0.5.4. The fix for stale `available` values was correctly applied in the Python layer (`hydrate_accounts`, `get_starting_balance`) but the dashboard template was still using its own logic that bypassed `display_balance` and showed `available` as the headline.
