@@ -2,6 +2,25 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.1] — 2026-05-02
+
+Closing the loop on smart suggestions. The action buttons in the Smart Suggestions panel now actually do something — previously they were styled like buttons but didn't link anywhere.
+
+### Added
+- **"Set cap" suggestion now creates a budget.** When the discretionary drift module fires (e.g., "Takeaway up 47%, try a $300/month cap"), tapping "Set cap" navigates to the new budget form with name, category, weekly amount, and cadence pre-filled. One click, one save, budget active.
+- **All other suggestion buttons now wired to action URLs:**
+  - "Plan transfer" (cashflow gap) → `/transfers/new` with source account and amount pre-filled
+  - "Plan it" (bill cluster) → `/transfers/new` to set up a top-up
+  - "Schedule payment" (plan expiry) → `/plans` (the management page)
+  - "Review subs" / "Cancel idle" (subscription audit) → `/transactions?cat=Subscriptions` filtered view
+  - "See transactions" (trend up/down) → `/transactions?cat=<category>` filtered view
+
+### Changed
+- **Suggestion buttons render as anchor links when an action URL exists**, with accent border/colour to signal they're tappable. Suggestions without an action URL keep the old disabled-button look (faded).
+
+### Note
+Suggestions you don't tap have no effect — they're informational. The "Set cap" flow doesn't auto-create budgets in the background; it just walks you to a pre-filled form so you can review the numbers and confirm.
+
 ## [0.6.0] — 2026-05-02
 
 The spending budgets release. A new first-class concept alongside bills and transfers, designed to model the discretionary spend that doesn't fit the "scheduled bill on a specific day" pattern — groceries, fuel, takeaway, fun money. Budgets drain the forecast smoothly across each period, factoring in real spending so you don't get double-counted.

@@ -119,7 +119,11 @@
           {{ s.text|safe }}
           <span class="reasoning">{{ s.reasoning }}</span>
         </div>
-        <button class="suggestion-action">{{ s.action }}</button>
+        {% if s.action_url %}
+        <a class="suggestion-action" href="{{ s.action_url }}">{{ s.action }}</a>
+        {% else %}
+        <button class="suggestion-action" disabled>{{ s.action }}</button>
+        {% endif %}
       </div>
       {% else %}
       <div style="padding: 12px 0; color: var(--text-3); font-size: 13px;">Nothing pressing right now.</div>

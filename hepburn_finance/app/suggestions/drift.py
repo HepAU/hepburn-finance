@@ -105,6 +105,16 @@ def discretionary_drift_suggestions(today=None):
     # What weekly equivalent?
     weekly = round(suggested_cap / 4.33)
 
+    # Build action URL that pre-fills the budget form. We pass weekly amount
+    # because budgets typically work better on a calendar-week cadence.
+    from urllib.parse import urlencode
+    action_qs = urlencode({
+        'name': f'{biggest["category"].split("·")[-1].strip() or biggest["category"]} cap',
+        'category': biggest['category'],
+        'amount': weekly,
+        'cadence': 'weekly',
+    })
+
     out = [{
         'icon': '🎯',
         'priority': 'attention',
@@ -116,6 +126,7 @@ def discretionary_drift_suggestions(today=None):
                       f'(~${weekly}/week). Halfway between recent and your usual rate. '
                       f'Saving ${biggest["recent"] - suggested_cap:.0f} this month if you stick to it.'),
         'action': 'Set cap',
+        'action_url': f'/budgets/new?{action_qs}',
         'kind': 'discretionary_drift',
     }]
 

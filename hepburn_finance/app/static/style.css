@@ -212,8 +212,22 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--line);
   cursor: pointer; white-space: nowrap; flex-shrink: 0;
   transition: all 0.15s;
+  text-decoration: none;
+  display: inline-block;
 }
 .suggestion-action:hover { background: var(--accent); color: var(--bg-0); border-color: var(--accent); }
+.suggestion-action[disabled],
+button.suggestion-action[disabled] {
+  opacity: 0.55;
+  cursor: default;
+}
+.suggestion-action[disabled]:hover {
+  background: var(--bg-3); color: var(--text-2); border-color: var(--line);
+}
+a.suggestion-action {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 
 /* Debt rank */
 .debt-rank {
