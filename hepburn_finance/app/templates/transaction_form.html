@@ -54,10 +54,32 @@
       </div>
       <div class="form-row checkbox-row" style="align-self: end; padding-bottom: 16px;">
         <input type="checkbox" name="is_internal_transfer" id="is_internal_transfer"
-          {% if tx.is_internal_transfer %}checked{% endif %}>
+          {% if tx.is_internal_transfer %}checked{% endif %}
+          onchange="document.getElementById('dest_block').style.display = this.checked ? 'block' : 'none'">
         <label for="is_internal_transfer">Internal transfer (between own accounts)</label>
       </div>
     </div>
+
+    {% if accounts %}
+    <div class="form-row" id="dest_block" style="display: {% if tx.is_internal_transfer %}block{% else %}none{% endif %}; background: var(--bg-1); padding: 12px 14px; border-radius: 8px;">
+      <label>Destination account <span class="form-hint">(creates matching credit there)</span></label>
+      <select name="destination_account_id">
+        <option value="">— None (just tag, don't post matching transaction) —</option>
+        {% set current_pair_dest = None %}
+        {% if tx.transfer_pair_id %}
+          {% for a in accounts %}{% if a.id == tx.transfer_pair_account_id %}{% set current_pair_dest = a.id %}{% endif %}{% endfor %}
+        {% endif %}
+        {% for a in accounts %}
+        <option value="{{ a.id }}" {% if a.id == tx.transfer_pair_account_id %}selected{% endif %}>
+          {{ a.bank }} · {{ a.name }}
+        </option>
+        {% endfor %}
+      </select>
+      <p class="form-hint" style="margin-top: 6px;">
+        Pick a destination if the matching transaction won't ever land via CSV (e.g. paying back a personal loan, mortgage account that doesn't get imported). The dashboard will create the credit on that account so its balance updates correctly.
+      </p>
+    </div>
+    {% endif %}
     {% else %}
     <div class="form-grid-2">
       <div class="form-row">

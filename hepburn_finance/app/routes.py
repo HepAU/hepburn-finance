@@ -816,7 +816,9 @@ def new_transaction():
 def edit_transaction(tid):
     with get_db() as conn:
         tx = conn.execute(
-            "SELECT t.*, a.name AS account_name FROM transactions t "
+            "SELECT t.*, a.name AS account_name, "
+            "(SELECT account_id FROM transactions WHERE id = t.transfer_pair_id) AS transfer_pair_account_id "
+            "FROM transactions t "
             "JOIN accounts a ON t.account_id = a.id WHERE t.id=?",
             (tid,)
         ).fetchone()
@@ -829,6 +831,8 @@ def edit_transaction(tid):
             new_amount = float(request.form['amount'])
             new_notes = request.form.get('notes', '').strip() or None
             new_is_internal = 1 if request.form.get('is_internal_transfer') else 0
+            destination_account_id = request.form.get('destination_account_id', '').strip()
+            destination_account_id = int(destination_account_id) if destination_account_id else None
 
             conn.execute(
                 "UPDATE transactions SET category=?, description=?, amount=?, "
@@ -836,6 +840,74 @@ def edit_transaction(tid):
                 "updated_at=datetime('now') WHERE id=?",
                 (new_category, new_description, new_amount, new_notes, new_is_internal, tid)
             )
+
+            # Counterpart logic: if marked as internal transfer AND user picked a
+            # destination, ensure a paired transaction exists on that account with
+            # the opposite-sign amount. Used for cases where the destination
+            # account doesn't get a CSV import (e.g. informal loans, accounts
+            # outside the user's bank).
+            existing_pair_id = tx['transfer_pair_id']
+            import hashlib
+
+            def _make_counterpart(dest_id, amt, desc, src_account_name, tx_date, tx_id):
+                """Create the matching transaction on the destination account."""
+                fp_input = f'pair|{tx_id}|{dest_id}|{tx_date}|{-amt}|{desc}'
+                fingerprint = hashlib.sha256(fp_input.encode()).hexdigest()
+                cur = conn.execute(
+                    "INSERT INTO transactions (account_id, date, amount, description, "
+                    "raw_description, category, notes, fingerprint, user_categorised, "
+                    "is_internal_transfer, transfer_pair_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (dest_id, tx_date, -amt, f'Transfer from {src_account_name}',
+                     desc, 'Transfer · Internal', None, fingerprint, 1, 1, tx_id)
+                )
+                return cur.lastrowid
+
+            if new_is_internal and destination_account_id:
+                src_name = tx['account_name']
+
+                if existing_pair_id:
+                    # Update the existing counterpart — but only if its account
+                    # matches the chosen destination. Otherwise: delete + recreate.
+                    pair = conn.execute(
+                        'SELECT id, account_id FROM transactions WHERE id=?',
+                        (existing_pair_id,)
+                    ).fetchone()
+                    if pair and pair['account_id'] == destination_account_id:
+                        conn.execute(
+                            "UPDATE transactions SET amount=?, "
+                            "description=?, raw_description=?, "
+                            "updated_at=datetime('now') WHERE id=?",
+                            (-new_amount, f'Transfer from {src_name}', new_description, existing_pair_id)
+                        )
+                    else:
+                        # Destination changed — delete old counterpart, create new
+                        if pair:
+                            conn.execute('DELETE FROM transactions WHERE id=?', (existing_pair_id,))
+                        new_pair_id = _make_counterpart(
+                            destination_account_id, new_amount, new_description,
+                            src_name, tx['date'], tid
+                        )
+                        conn.execute(
+                            "UPDATE transactions SET transfer_pair_id=? WHERE id=?",
+                            (new_pair_id, tid)
+                        )
+                else:
+                    # Create the counterpart
+                    new_pair_id = _make_counterpart(
+                        destination_account_id, new_amount, new_description,
+                        src_name, tx['date'], tid
+                    )
+                    conn.execute(
+                        "UPDATE transactions SET transfer_pair_id=? WHERE id=?",
+                        (new_pair_id, tid)
+                    )
+            elif not new_is_internal and existing_pair_id:
+                # User unchecked internal transfer — clean up the orphan counterpart
+                conn.execute('DELETE FROM transactions WHERE id=?', (existing_pair_id,))
+                conn.execute(
+                    "UPDATE transactions SET transfer_pair_id=NULL WHERE id=?",
+                    (tid,)
+                )
 
             # Bulk apply: did they ask to apply this category to similar transactions?
             apply_to_similar = request.form.get('apply_to_similar')
@@ -875,18 +947,36 @@ def edit_transaction(tid):
                     (tid, f'%{first_word}%')
                 ).fetchall()
 
+    # Accounts list for the destination-account dropdown (for transfers)
+    with get_db() as conn:
+        all_accounts = conn.execute(
+            "SELECT id, name, bank, type FROM accounts WHERE archived=0 "
+            "AND id != ? ORDER BY bank, type, name",
+            (tx['account_id'],)
+        ).fetchall()
+
     return render_template(
         'transaction_form.html',
         tx=dict(tx),
         categories=_all_categories(),
         similar=[dict(s) for s in similar],
+        accounts=[dict(a) for a in all_accounts],
     )
 
 
 @bp.route('/transactions/<int:tid>/delete', methods=['POST'])
 def delete_transaction(tid):
+    """Delete a transaction. If it's a paired transfer, cascade to the other half."""
     with get_db() as conn:
+        # Find the pair (if any) before deleting
+        pair_row = conn.execute(
+            'SELECT transfer_pair_id FROM transactions WHERE id=?', (tid,)
+        ).fetchone()
+        pair_id = pair_row['transfer_pair_id'] if pair_row else None
+
         conn.execute('DELETE FROM transactions WHERE id=?', (tid,))
+        if pair_id:
+            conn.execute('DELETE FROM transactions WHERE id=?', (pair_id,))
     return redirect(url_for('main.list_transactions'))
 
 

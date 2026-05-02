@@ -2,6 +2,22 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.5.7] — 2026-05-02
+
+Half-transfer fix. When you mark a CSV-imported transaction as an internal transfer to an account that doesn't get its own CSV (informal loans, payday-day mortgage payments, etc.), the dashboard now creates the matching transaction on the destination so its balance updates correctly.
+
+### Added
+- **Destination account picker on the transaction edit form.** When you tick "Internal transfer", a dropdown appears letting you pick the destination account. On save, the dashboard creates a matching credit transaction on that account, linked back to the original via `transfer_pair_id`. Leave the dropdown blank to behave as before (just tag, no counterpart).
+- **Use case:** repaying Keith Howieson (informal loan) — the outgoing $500 in your Income & Bills CSV now reduces Keith's debt by $500 because the dashboard auto-posts the credit there.
+- **Use case:** mortgage payments where the mortgage account isn't imported separately — the outgoing transaction in your everyday account reduces the mortgage balance automatically.
+
+### Changed
+- **Transaction delete cascades to paired half.** Deleting one side of a paired internal transfer now also deletes the other half. No more orphaned counterparts after edits.
+- **Re-editing the destination on a paired transfer** works correctly — old counterpart is deleted, new one created in the right place.
+
+### Note
+This only affects newly-edited transactions. To apply to existing manually-tagged transfers, just edit each one and pick the destination account.
+
 ## [0.5.6] — 2026-05-02
 
 Critical bug fix in the balance computation model.
