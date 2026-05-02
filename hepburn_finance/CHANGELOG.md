@@ -2,6 +2,11 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.6] — 2026-05-02
+
+### Added
+- **+ Plan button in dashboard top action bar** alongside + Transaction, + Afterpay, + Transfer, + Budget, + Add bill. Direct one-click route to add an interest-free plan (Latitude Gem Visa, GO Mastercard, etc.) without needing to find the Plans page first.
+
 ## [0.6.5] — 2026-05-02
 
 UX polish: account ordering reflects daily-use priority, plus mobile-specific layout adjustments.
