@@ -89,16 +89,31 @@ def hydrate_accounts(account_rows):
     for r in account_rows:
         d = dict(r)
         opening = d.get('opening_balance')
+        tx_sum = sums.get(d['id'], 0)
+        has_transactions = d['id'] in sums and tx_sum != 0  # Has movements
+
         if opening is not None:
-            d['computed_balance'] = round(opening + sums.get(d['id'], 0), 2)
+            d['computed_balance'] = round(opening + tx_sum, 2)
         else:
             d['computed_balance'] = d['balance']
-        # Also compute "what to show as the headline" — for transaction/credit
-        # accounts use available if present (bank's "spendable now" figure)
-        if d['type'] in ('transaction', 'credit') and d.get('available') is not None:
-            d['display_balance'] = d['available']
+
+        # Headline balance:
+        # - For transaction/credit accounts WITH transactions, computed_balance
+        #   is most accurate (transactions drive the truth in v0.4.0+ model).
+        # - For transaction/credit accounts WITHOUT transactions yet, use the
+        #   manual `available` figure if set — it's the user's freshest snapshot
+        #   from the bank.
+        # - Everything else uses computed_balance.
+        if d['type'] in ('transaction', 'credit'):
+            if has_transactions:
+                d['display_balance'] = d['computed_balance']
+            elif d.get('available') is not None:
+                d['display_balance'] = d['available']
+            else:
+                d['display_balance'] = d['computed_balance']
         else:
             d['display_balance'] = d['computed_balance']
+
         d['latest_tx_date'] = latest.get(d['id'])
         out.append(d)
     return out

@@ -2,6 +2,17 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.5.4] — 2026-04-30
+
+Bug fix: balances and forecast now correctly reflect uploaded transactions.
+
+### Fixed
+- **Calendar forecast and account cards now use the most accurate balance source.** Previously, if `available` (the bank's "spendable now" figure) was set on an account, it would always be preferred — even if you'd subsequently uploaded transactions that made `opening_balance + transactions` more accurate. Now: when transactions exist, the computed balance wins. When they don't (fresh account), `available` is still used as the freshest manual snapshot.
+- **Visible symptom this fixes**: yesterday's income shows in transaction history, but calendar days going forward show stale figures and don't reflect the deposit. This is now resolved — the forecast walks forward from the true computed balance.
+
+### Why this matters
+Before this fix, the `available` field acted as a "stuck" override. Setting it once meant the dashboard used it indefinitely, ignoring fresh transaction data. After this fix, `available` is used only as a fallback when no transactions exist for an account — once you start uploading CSVs, computed balance takes over.
+
 ## [0.5.3] — 2026-04-30
 
 Polish release for the HA popup and dashboard. Three small but meaningful fixes.

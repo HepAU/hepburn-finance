@@ -208,9 +208,19 @@ def expand_transfers(from_date, to_date, selected_account_ids):
 def get_starting_balance(account_ids):
     """Spendable cash today across the selected accounts.
 
-    Uses `available` when set (bank's "spendable now" figure that nets out
-    pending holds), otherwise the computed balance from opening_balance +
-    transactions. This is what the user could actually spend right now.
+    Logic (v0.5.4):
+    - If opening_balance is set AND there are transactions for this account,
+      use opening_balance + sum(transactions) — transactions are the most
+      authoritative source of truth.
+    - If opening_balance is set but no transactions yet, use `available` if
+      set (it's a fresher manual snapshot from the bank), otherwise opening.
+    - If opening_balance is null (legacy / never initialised), fall back to
+      `available` then `balance`.
+
+    The previous version always preferred `available` when set, which led
+    to a stale view: after a CSV upload added today's income to the
+    transactions table, the forecast still used the user's earlier
+    `available` figure that didn't include it.
     """
     if not account_ids:
         return 0.0
@@ -224,10 +234,27 @@ def get_starting_balance(account_ids):
         ).fetchall()
         total = 0.0
         for r in rows:
-            if r['available'] is not None:
-                total += r['available']
+            opening = r['opening_balance']
+            if opening is not None:
+                # Has an opening_balance — use computed (transactions-driven)
+                tx_count = conn.execute(
+                    'SELECT COUNT(*) FROM transactions '
+                    'WHERE account_id = ? '
+                    'AND (is_internal_transfer = 0 OR is_internal_transfer IS NULL)',
+                    (r['id'],)
+                ).fetchone()[0]
+                if tx_count > 0:
+                    total += compute_account_balance(r, conn=conn)
+                elif r['available'] is not None:
+                    total += r['available']
+                else:
+                    total += opening
             else:
-                total += compute_account_balance(r, conn=conn)
+                # Legacy account with no opening_balance — old behaviour
+                if r['available'] is not None:
+                    total += r['available']
+                else:
+                    total += r['balance']
     return total
 
 
