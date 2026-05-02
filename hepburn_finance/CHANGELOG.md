@@ -2,6 +2,14 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.5.5] — 2026-05-02
+
+Hotfix for v0.5.4. The fix for stale `available` values was correctly applied in the Python layer (`hydrate_accounts`, `get_starting_balance`) but the dashboard template was still using its own logic that bypassed `display_balance` and showed `available` as the headline.
+
+### Fixed
+- **Account cards now show the computed balance as the headline** (transactions-driven), with the bank's `available` figure shown as a small secondary "Bank shows $X" line — only when the two differ. Previously: $200.80 headline (stale available), $8,259.37 secondary "Balance" (computed). Now: $8,259.37 headline, "Bank shows $200.80" secondary if drift exists.
+- **Cash today and forecast** were already correct in v0.5.4 — only the visual cards were misleading.
+
 ## [0.5.4] — 2026-04-30
 
 Bug fix: balances and forecast now correctly reflect uploaded transactions.

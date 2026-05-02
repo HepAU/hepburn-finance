@@ -183,29 +183,26 @@
           </span>
         </div>
         <div class="acc-name">{{ a.name }}</div>
-        {# Headline value: for transaction/credit show available (bank's "spendable now"),
-           for others show computed_balance (opening + transactions). #}
-        {% if a.type in ['transaction','credit'] and a.available is not none %}
-          <div class="acc-balance
-            {%- if a.available == 0 %} dim
-            {%- elif a.available < 0 %} danger
-            {%- elif a.type == 'transaction' and a.available < 100 %} warn
-            {%- endif %}">{{ fmt_money(a.available) }}</div>
-          <div class="acc-balance-secondary">
-            <span class="acc-balance-label">Balance</span> {{ fmt_money(a.computed_balance) }}
-          </div>
-        {% else %}
-          <div class="acc-balance
-            {%- if a.type in ['loan','ppor','loan_investment','loan_personal','loan_informal'] %} neutral
-            {%- elif a.computed_balance == 0 %} dim
-            {%- elif a.computed_balance < 0 %} danger
-            {%- elif a.type == 'transaction' and a.computed_balance < 200 %} warn
-            {%- endif %}">{{ fmt_money(a.computed_balance) }}</div>
-          {% if a.type in ['loan','ppor','loan_investment','loan_personal'] and a.available_redraw and a.available_redraw > 0 %}
-          <div class="acc-balance-secondary">
-            <span class="acc-balance-label">Redraw</span> {{ fmt_money(a.available_redraw, 0) }}
-          </div>
-          {% endif %}
+        {# Headline value comes from hydrate_accounts() in balances.py:
+           - For transaction/credit accounts WITH transactions → computed_balance
+           - For transaction/credit accounts WITHOUT transactions → available (if set), else computed
+           - For everything else → computed_balance
+           When the headline is computed and there's also a stale `available`, show it
+           as a secondary "Bank shows" line so the user can spot drift. #}
+        <div class="acc-balance
+          {%- if a.type in ['loan','ppor','loan_investment','loan_personal','loan_informal'] %} neutral
+          {%- elif a.display_balance == 0 %} dim
+          {%- elif a.display_balance < 0 %} danger
+          {%- elif a.type in ['transaction','credit'] and a.display_balance < 200 %} warn
+          {%- endif %}">{{ fmt_money(a.display_balance) }}</div>
+        {% if a.type in ['transaction','credit'] and a.available is not none and a.display_balance != a.available %}
+        <div class="acc-balance-secondary">
+          <span class="acc-balance-label">Bank shows</span> {{ fmt_money(a.available) }}
+        </div>
+        {% elif a.type in ['loan','ppor','loan_investment','loan_personal'] and a.available_redraw and a.available_redraw > 0 %}
+        <div class="acc-balance-secondary">
+          <span class="acc-balance-label">Redraw</span> {{ fmt_money(a.available_redraw, 0) }}
+        </div>
         {% endif %}
         <div class="acc-meta">
           {% if a.account_number and a.account_number != 'None' %}{{ a.account_number }}{% endif %}
