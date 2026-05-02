@@ -113,23 +113,25 @@
 
     {% if account %}
     <details class="form-card" style="background: var(--bg-1); margin: 16px 0; padding: 0;">
-      <summary style="padding: 12px 14px; cursor: pointer; font-size: 12px; color: var(--text-3);">⚙ Override opening balance (advanced)</summary>
+      <summary style="padding: 12px 14px; cursor: pointer; font-size: 12px; color: var(--text-3);">⚙ Override balance (advanced)</summary>
       <div style="padding: 0 14px 14px 14px;">
         <p class="form-hint" style="margin-top: 0;">
-          Use this only if reality has drifted from the dashboard — e.g. a bank fee that didn't import, or you've started fresh and want to set today's balance directly. Most of the time, upload a CSV instead.
+          Use this only if reality has drifted from the dashboard — e.g. a bank fee that didn't import, or you want to start fresh from a recent statement. Most of the time, upload a CSV instead.
         </p>
         <div class="form-grid-2">
           <div class="form-row">
-            <label>New opening balance</label>
-            <input type="number" name="new_opening_balance" step="0.01" placeholder="Leave blank to keep">
+            <label>Balance figure</label>
+            <input type="number" name="new_opening_balance" step="0.01" placeholder="e.g. 1234.56">
+            <p class="form-hint" style="margin-top: 4px;">From a bank statement, app, or current view.</p>
           </div>
           <div class="form-row">
-            <label>As-of date</label>
-            <input type="date" name="opening_as_of" placeholder="Defaults to today">
+            <label>Balance is correct at end of</label>
+            <input type="date" name="opening_as_of" value="{{ today_iso }}">
+            <p class="form-hint" style="margin-top: 4px;">The day this balance figure was true at end-of-day.</p>
           </div>
         </div>
-        <p class="form-hint">
-          Setting a new opening balance will delete all transactions before the as-of date and use the new figure as the starting point.
+        <p class="form-hint" style="background: rgba(245,181,68,0.08); padding: 10px 12px; border-radius: 4px; border-left: 3px solid var(--amber);">
+          <strong>What happens:</strong> all transactions on or before this date will be deleted (they're already baked into the new figure). Transactions <em>after</em> this date stay and roll forward from the new opening.
         </p>
       </div>
     </details>

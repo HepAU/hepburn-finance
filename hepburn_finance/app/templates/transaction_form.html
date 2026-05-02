@@ -9,11 +9,15 @@
         {% else %}Manually record a transaction. Useful for accounts without CSV exports.{% endif %}
       </p>
     </div>
-    <a class="btn ghost" href="{{ url_for('main.list_transactions') }}">← All transactions</a>
+    <a class="btn ghost" href="{{ url_for('main.list_transactions', **(filter_args or {})) }}">← All transactions</a>
   </div>
 
   <form class="form-card" method="POST">
-    {% if tx %}
+    {% if tx and filter_args %}
+      {% for key, value in filter_args.items() if value %}
+      <input type="hidden" name="_filter_{{ key }}" value="{{ value }}">
+      {% endfor %}
+    {% endif %}    {% if tx %}
     <h2>{{ tx.description }}</h2>
     <p class="form-sub">Original raw text: <code>{{ tx.raw_description or tx.description }}</code></p>
     {% else %}
@@ -135,12 +139,17 @@
         {% if tx %}
         <form method="POST" action="{{ url_for('main.delete_transaction', tid=tx.id) }}" style="display:inline;"
           onsubmit="return confirm('Delete this transaction permanently?');">
+          {% if filter_args %}
+            {% for key, value in filter_args.items() if value %}
+            <input type="hidden" name="_filter_{{ key }}" value="{{ value }}">
+            {% endfor %}
+          {% endif %}
           <button type="submit" class="btn danger">Delete</button>
         </form>
         {% endif %}
       </div>
       <div class="form-actions-right">
-        <a class="btn ghost" href="{{ url_for('main.list_transactions') }}">Cancel</a>
+        <a class="btn ghost" href="{{ url_for('main.list_transactions', **(filter_args or {})) }}">Cancel</a>
         <button type="submit" class="btn primary">Save</button>
       </div>
     </div>

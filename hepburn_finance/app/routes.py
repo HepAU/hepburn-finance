@@ -276,7 +276,7 @@ def new_account():
                 ),
             )
         return redirect(url_for('main.dashboard'))
-    return render_template('account_form.html', account=None)
+    return render_template('account_form.html', account=None, today_iso=date.today().isoformat())
 
 
 @bp.route('/accounts/<int:aid>/edit', methods=['GET', 'POST'])
@@ -293,9 +293,12 @@ def edit_account(aid):
             if new_opening:
                 try:
                     new_opening_val = float(new_opening)
-                    # Wipe transactions before the as-of date
+                    # Wipe transactions ON OR BEFORE the as-of date.
+                    # Semantics: "balance is correct at end of <opening_as_of>",
+                    # so transactions on that day or earlier are already baked
+                    # into the new opening figure. Only later transactions roll forward.
                     conn.execute(
-                        'DELETE FROM transactions WHERE account_id=? AND date < ?',
+                        'DELETE FROM transactions WHERE account_id=? AND date<=?',
                         (aid, opening_as_of)
                     )
                     conn.execute(
@@ -330,7 +333,7 @@ def edit_account(aid):
     # Hydrate the single account so the form can show computed_balance
     from app.balances import hydrate_accounts
     hydrated = hydrate_accounts([acc_row])
-    return render_template('account_form.html', account=hydrated[0] if hydrated else dict(acc_row))
+    return render_template('account_form.html', account=hydrated[0] if hydrated else dict(acc_row), today_iso=date.today().isoformat())
 
 
 @bp.route('/accounts/<int:aid>/delete', methods=['POST'])
@@ -931,7 +934,13 @@ def edit_transaction(tid):
                          f'Pattern: "{like_pattern}" → {new_category}')
                     )
 
-            return redirect(url_for('main.list_transactions'))
+            # Preserve any list filters the user came from (account, category, search)
+            filter_args = {}
+            for key in ('account', 'cat', 'q'):
+                val = request.form.get(f'_filter_{key}', '').strip()
+                if val:
+                    filter_args[key] = val
+            return redirect(url_for('main.list_transactions', **filter_args))
 
     # Find similar untagged transactions to offer bulk-tag
     similar = []
@@ -955,12 +964,20 @@ def edit_transaction(tid):
             (tx['account_id'],)
         ).fetchall()
 
+    # Capture filter args from URL so the edit form can pass them through
+    filter_args = {
+        'account': request.args.get('account', '').strip(),
+        'cat': request.args.get('cat', '').strip(),
+        'q': request.args.get('q', '').strip(),
+    }
+
     return render_template(
         'transaction_form.html',
         tx=dict(tx),
         categories=_all_categories(),
         similar=[dict(s) for s in similar],
         accounts=[dict(a) for a in all_accounts],
+        filter_args=filter_args,
     )
 
 
@@ -977,7 +994,13 @@ def delete_transaction(tid):
         conn.execute('DELETE FROM transactions WHERE id=?', (tid,))
         if pair_id:
             conn.execute('DELETE FROM transactions WHERE id=?', (pair_id,))
-    return redirect(url_for('main.list_transactions'))
+    # Preserve filters from the originating list view (passed as form fields)
+    filter_args = {}
+    for key in ('account', 'cat', 'q'):
+        val = request.form.get(f'_filter_{key}', '').strip()
+        if val:
+            filter_args[key] = val
+    return redirect(url_for('main.list_transactions', **filter_args))
 
 
 @bp.route('/transactions/detect-transfers', methods=['POST'])

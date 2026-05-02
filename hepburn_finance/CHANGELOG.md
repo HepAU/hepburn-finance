@@ -2,6 +2,17 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.5.8] — 2026-05-02
+
+Two bug fixes addressing real workflow friction.
+
+### Fixed
+- **Filtered transaction list now preserves the filter when editing.** Previously: filter to one account, click edit on a transaction, save → list reverts to showing all accounts. Now the filter (account, category, search query) persists through edit/save/delete via hidden form fields. Same for the "Cancel" and "← All transactions" links — they go back to the filtered list, not the unfiltered one.
+- **Override balance "as-of date" now uses end-of-day semantics.** Before: typing "01/05/2026" deleted transactions from 30/04/2026 (treated as "balance at start of 1 May, 1 May not yet counted"). Now: same input is interpreted as "balance is correct at end of 1 May" — transactions on 1 May and earlier are deleted (already baked into the new figure), transactions on 2 May and later roll forward.
+
+### Changed
+- **Override balance form re-labelled for clarity.** The field was "As-of date" with no help text. Now: "Balance is correct at end of [date]" with explicit help text and a yellow callout explaining what gets deleted vs kept. Defaults to today's date instead of being empty.
+
 ## [0.5.7] — 2026-05-02
 
 Half-transfer fix. When you mark a CSV-imported transaction as an internal transfer to an account that doesn't get its own CSV (informal loans, payday-day mortgage payments, etc.), the dashboard now creates the matching transaction on the destination so its balance updates correctly.

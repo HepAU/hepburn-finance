@@ -60,7 +60,7 @@
       </thead>
       <tbody>
         {% for t in transactions %}
-        <tr class="tx-row{% if t.is_internal_transfer %} tx-internal{% endif %}" onclick="window.location='{{ url_for('main.edit_transaction', tid=t.id) }}'">
+        <tr class="tx-row{% if t.is_internal_transfer %} tx-internal{% endif %}" onclick="window.location='{{ url_for('main.edit_transaction', tid=t.id, account=aid, cat=cat, q=q) }}'">
           <td class="tx-date">{{ t.date }}</td>
           <td class="tx-desc-cell">
             {{ t.description }}
