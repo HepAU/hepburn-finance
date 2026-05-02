@@ -2,6 +2,27 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.5] — 2026-05-02
+
+UX polish: account ordering reflects daily-use priority, plus mobile-specific layout adjustments.
+
+### Changed
+- **Account ordering now prioritises frequency-of-use, not alphabetical type.** Within each bank, accounts now appear in this order: transaction → credit → savings → informal loans → personal loans → owner-occupier → investment loans. So Card Account and Income & Bills surface first; mortgages move to the bottom of their bank group.
+- **Bank groups themselves now ordered by their highest-priority account.** Banks containing your transaction accounts surface first; banks with only mortgages or only loans appear later.
+
+### Added
+- **Mobile-first layout adjustments** at viewport ≤720px:
+  - Calendar hidden (12 cells × 7 columns is unscannable on a phone — swipe to dashboard for the popup)
+  - Debt attack panel hidden (reference-only, takes vertical space)
+  - Visa expandable summary hidden (large block, tap from accounts to see)
+  - Stress card and budgets card padding tightened
+  - Action buttons (+ Transaction / + Afterpay etc) scroll horizontally instead of wrapping
+  - Greeting and tier text sized down for readability
+- **Desktop layout unchanged** — the full dashboard is preserved when viewport is >720px.
+
+### Notes
+This is a CSS-only mobile change — no separate mobile dashboard, no separate routes. If you load the same URL on phone vs desktop, you get appropriate layouts automatically. Sections aren't *deleted* on mobile — they're just hidden via display:none, so they remain in the DOM and re-appear when the viewport widens (e.g. landscape mode on tablet).
+
 ## [0.6.4] — 2026-05-02
 
 Three bug fixes from real-world usage.

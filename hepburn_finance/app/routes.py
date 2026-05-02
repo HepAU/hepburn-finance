@@ -147,9 +147,22 @@ def dashboard():
     today = date.today()
     selected_ids = _selected_account_ids()
 
+    # Account display priority — frequency of use, not alphabetical type.
+    # Most-actioned everyday accounts surface first; reference accounts last.
+    TYPE_PRIORITY = {
+        'transaction': 1,   # Card, Income & Bills — checked daily
+        'credit':      2,   # Gem Visa — checked weekly
+        'savings':     3,   # Sub-accounts — referenced sometimes
+        'loan_informal': 4, # Keith, PVRSC — referenced when paying back
+        'loan_personal': 5, # Solar, car loans — fixed schedule
+        'ppor':        6,   # Owner-occupier mortgage — reference
+        'loan_investment': 7,  # Investment loans — reference
+        'loan':        8,   # Generic legacy
+    }
+
     with get_db() as conn:
         all_accounts_raw = conn.execute(
-            "SELECT * FROM accounts WHERE archived=0 ORDER BY bank, type, name"
+            "SELECT * FROM accounts WHERE archived=0 ORDER BY bank, name"
         ).fetchall()
         recent_tx = conn.execute(
             "SELECT t.*, a.name AS account_name "
@@ -165,12 +178,29 @@ def dashboard():
     from app.balances import hydrate_accounts
     all_accounts = hydrate_accounts(all_accounts_raw)
 
+    # Re-sort by (bank, type-priority, name) using our priority map
+    all_accounts.sort(key=lambda a: (
+        a['bank'] or '',
+        TYPE_PRIORITY.get(a['type'], 99),
+        a['name'] or '',
+    ))
+
     # Account-id → name map (for transfer rendering)
     account_name = {a['id']: a['name'] for a in all_accounts}
 
     accounts_by_bank = {}
     for a in all_accounts:
         accounts_by_bank.setdefault(a['bank'], []).append(a)
+
+    # Order bank groups by the most-used account type they contain.
+    # A bank with a transaction account beats a bank with only mortgages.
+    accounts_by_bank = dict(sorted(
+        accounts_by_bank.items(),
+        key=lambda kv: (
+            min((TYPE_PRIORITY.get(a['type'], 99) for a in kv[1]), default=99),
+            kv[0] or '',
+        )
+    ))
 
     balances, starting_bal, instances_60d = forecast_daily_balances(
         selected_ids, days_ahead=60, today=today

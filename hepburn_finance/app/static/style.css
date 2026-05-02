@@ -864,6 +864,50 @@ a.suggestion-action {
   .form-grid-2 { grid-template-columns: 1fr; }
 }
 
+/* Mobile-specific: hide noisy or low-priority sections.
+   Phones get a focused view: header, stress, budgets, account cards,
+   then upcoming bills + recent activity. Calendar, debt attack panel,
+   and the visa expandable section are deferred behind a tap-to-show.
+*/
+@media (max-width: 720px) {
+  /* Calendar — too dense for narrow viewports, hide */
+  .cal-card { display: none; }
+
+  /* Hide Debt attack on mobile by default — too tall, reference-only.
+     The .assist-card:nth-child(2) is the debt attack panel. */
+  .assist-row .assist-card:nth-child(2) { display: none; }
+
+  /* Tighten section spacing */
+  .stress-card { padding: 16px; margin-bottom: 16px; }
+  .stress-figures { gap: 12px; }
+  .stress-fig .value { font-size: 22px; }
+  .budgets-card { padding: 14px 16px; margin-bottom: 16px; }
+  .stress-headline { padding-bottom: 12px; margin-bottom: 12px; }
+
+  /* Quick actions — hide the upload tile to free up vertical space */
+  .quick-actions { grid-template-columns: 1fr; gap: 8px; }
+
+  /* Account cards — stack tighter */
+  .account-group { margin-bottom: 16px; }
+
+  /* Visa expandable — hide on mobile by default (large block) */
+  .visa-card { display: none; }
+
+  /* Smaller hero typography for mobile */
+  .greeting { font-size: 22px; }
+  .stress-tier { font-size: 18px; }
+
+  /* The "+ Transaction / + Afterpay / + Transfer / + Budget / + Add bill" 
+     action bar wraps on mobile; ensure it scrolls horizontally. */
+  .topbar > div:last-child {
+    display: flex; flex-wrap: nowrap; overflow-x: auto;
+    gap: 6px; padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .topbar > div:last-child::-webkit-scrollbar { display: none; }
+  .topbar .btn { flex-shrink: 0; font-size: 12px; padding: 6px 10px; }
+}
+
 /* Transaction list table */
 .tx-table {
   width: 100%;
