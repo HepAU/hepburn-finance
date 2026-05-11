@@ -722,6 +722,38 @@ def list_transactions():
             "AND (user_categorised = 0 OR user_categorised IS NULL)"
         ).fetchone()[0]
 
+        # Running balance column — only meaningful when:
+        #   1. Filtered to a single account
+        #   2. No other filters (category, search, uncat) that would hide transactions
+        # Otherwise the column would jump around as transactions are filtered out,
+        # making the running balance meaningless.
+        running_balances = {}
+        show_running_balance = False
+        if aid and not cat and not q and not uncat:
+            try:
+                aid_int = int(aid)
+                # Fetch the account's opening_balance
+                acc_row = conn.execute(
+                    'SELECT opening_balance, balance FROM accounts WHERE id=?',
+                    (aid_int,)
+                ).fetchone()
+                if acc_row:
+                    opening = acc_row['opening_balance']
+                    if opening is None:
+                        opening = acc_row['balance'] or 0
+                    # Walk transactions oldest-first to accumulate balance
+                    all_txs_asc = conn.execute(
+                        'SELECT id, amount FROM transactions WHERE account_id=? '
+                        'ORDER BY date ASC, id ASC', (aid_int,)
+                    ).fetchall()
+                    running = float(opening)
+                    for r in all_txs_asc:
+                        running += r['amount']
+                        running_balances[r['id']] = round(running, 2)
+                    show_running_balance = True
+            except (ValueError, TypeError):
+                pass
+
     return render_template(
         'transactions.html',
         transactions=[dict(t) for t in txs],
@@ -729,6 +761,8 @@ def list_transactions():
         categories=_all_categories(),
         q=q, cat=cat, aid=aid, uncat=uncat,
         uncat_count=uncat_count,
+        running_balances=running_balances,
+        show_running_balance=show_running_balance,
     )
 
 

@@ -81,6 +81,7 @@
           <th>Account</th>
           <th>Category</th>
           <th class="ralign">Amount</th>
+          {% if show_running_balance %}<th class="ralign">Balance</th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -110,12 +111,27 @@
           <td class="ralign tx-amount-cell {% if t.amount > 0 %}positive{% else %}negative{% endif %}">
             {{ fmt_money(t.amount) }}
           </td>
+          {% if show_running_balance %}
+          <td class="ralign tx-running-balance">
+            {%- set rb = running_balances.get(t.id) -%}
+            {%- if rb is not none -%}
+              <span class="{% if rb < 0 %}negative{% endif %}">{{ fmt_money(rb) }}</span>
+            {%- else -%}
+              <span class="tx-running-na">—</span>
+            {%- endif -%}
+          </td>
+          {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="5" style="text-align: center; padding: 24px; color: var(--text-3);">No transactions match.</td></tr>
+        <tr><td colspan="{% if show_running_balance %}6{% else %}5{% endif %}" style="text-align: center; padding: 24px; color: var(--text-3);">No transactions match.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% if aid and (cat or q or uncat) %}
+  <p style="margin-top: 12px; font-size: 11px; color: var(--text-3); text-align: center;">
+    Running balance column hidden while extra filters are active. Clear category/search/uncategorised filters to see it.
+  </p>
+  {% endif %}
 </div>
 {% endblock %}

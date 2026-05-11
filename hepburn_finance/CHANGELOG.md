@@ -2,6 +2,17 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.11] — 2026-05-11
+
+### Added
+- **Running balance column on the transactions list page.** Visible when filtered to a single account with no other filters active (category, search, uncategorised). Each row shows the account balance *immediately after that transaction posted*. Same column convention as a bank statement.
+
+### Visibility rules
+The Balance column only appears when `account=<id>` is the only filter. If you also filter by category, search, or uncategorised-only, the column hides and shows a small note explaining why — running balance with hidden rows in between would be misleading.
+
+### Use case
+When the dashboard's headline balance disagrees with the bank, filter to that account and scroll down. The Balance column lets you compare row-by-row against the bank statement to find the exact transaction where reconciliation breaks (missing import, doubled transfer, wrong amount, etc.). Bottom-up: the very first transaction's balance should equal opening_balance + that transaction's amount. Top-down: the most recent transaction's balance should equal the headline balance the dashboard shows.
+
 ## [0.6.10] — 2026-05-11
 
 ### Fixed

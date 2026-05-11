@@ -964,6 +964,18 @@ a.suggestion-action {
 }
 .tx-amount-cell.positive { color: var(--green); }
 .tx-amount-cell.negative { color: var(--text); }
+
+/* Running balance column — visible only when filtered to a single account
+   with no other filters. Tabular numerals for clean column alignment. */
+.tx-running-balance {
+  font-feature-settings: 'tnum';
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.tx-running-balance .negative { color: var(--red); }
+.tx-running-na { color: var(--text-3); font-weight: 400; }
 .tx-cat-untagged {
   background: var(--amber-bg) !important;
   color: var(--amber) !important;
