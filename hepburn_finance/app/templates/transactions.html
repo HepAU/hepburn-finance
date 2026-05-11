@@ -90,6 +90,13 @@
           <td class="tx-desc-cell">
             {{ t.description }}
             {% if t.is_internal_transfer %}<span class="tag-internal">Internal</span>{% endif %}
+            {% if t.pair_account_name %}
+              {# Direction inferred from amount sign: positive = money coming in (from elsewhere),
+                 negative = money going out (to elsewhere). #}
+              <span class="tx-pair-tag">
+                {% if t.amount > 0 %}from{% else %}to{% endif %} {{ t.pair_account_name }}
+              </span>
+            {% endif %}
             {% if t.notes %}<div class="tx-note">{{ t.notes }}</div>{% endif %}
           </td>
           <td class="tx-account">{{ t.account_name }}</td>

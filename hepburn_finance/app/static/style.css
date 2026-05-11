@@ -985,6 +985,19 @@ a.suggestion-action {
   font-weight: 500;
   vertical-align: middle;
 }
+/* Pair tag — shows the other side of a paired internal transfer */
+.tx-pair-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--bg-2);
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 500;
+  vertical-align: middle;
+  font-style: normal;
+}
 .tx-item-clickable {
   cursor: pointer;
   transition: background 0.1s;

@@ -2,6 +2,14 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.8] — 2026-05-11
+
+### Added
+- **Source/destination tag on internal transfers in the transactions list.** Paired internal transfers now show a small "from <Account>" tag next to the Internal badge for incoming rows, or "to <Account>" for outgoing rows. Direction is inferred from the amount sign. Only appears when the transfer has a paired counterpart in the database — un-paired Internal transactions (auto-detected but not linked) silently skip the tag.
+
+### How
+Added a LEFT JOIN through `transfer_pair_id` to fetch the paired transaction's account in the same query, so the list view knows which account is on the other side without N+1 lookups. Performance impact negligible (existing index on transfer_pair_id).
+
 ## [0.6.7] — 2026-05-02
 
 ### Added

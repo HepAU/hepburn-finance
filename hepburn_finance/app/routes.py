@@ -672,8 +672,17 @@ def list_transactions():
     aid = request.args.get('account', '').strip()
     uncat = request.args.get('uncat', '').strip() == '1'
 
-    sql = ("SELECT t.*, a.name AS account_name "
-           "FROM transactions t JOIN accounts a ON t.account_id = a.id "
+    # Build SQL with a LEFT JOIN through transfer_pair_id to the matching half,
+    # then JOIN to that half's account. Gives us pair_account_name = the OTHER
+    # side of the transfer (source if this row is the credit, destination if
+    # this row is the debit).
+    sql = ("SELECT t.*, a.name AS account_name, "
+           "pair_acc.name AS pair_account_name, "
+           "pair_acc.bank AS pair_account_bank "
+           "FROM transactions t "
+           "JOIN accounts a ON t.account_id = a.id "
+           "LEFT JOIN transactions pair_t ON pair_t.id = t.transfer_pair_id "
+           "LEFT JOIN accounts pair_acc ON pair_acc.id = pair_t.account_id "
            "WHERE 1=1")
     params = []
     if q:
