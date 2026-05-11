@@ -1,6 +1,6 @@
 ---
 name: Hepburn Finance
-version: "0.6.9"
+version: "0.6.10"
 slug: hepburn_finance
 description: Family finance dashboard with cash flow forecasting, scheduled bills, and AI-assisted insights
 url: https://github.com/HepAU/hepburn-finance

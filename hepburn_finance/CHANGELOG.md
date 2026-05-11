@@ -2,6 +2,14 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.10] — 2026-05-11
+
+### Fixed
+- **Delete button on the edit-transaction form now actually deletes.** Previously the Delete button was wrapped in a `<form>` nested inside the outer edit `<form>`. Nested forms are invalid HTML — browsers ignore the inner one and route the click to the outer form's action (`/edit`) instead of `/delete`. So clicking Delete silently re-saved the transaction with no changes, never deleted. Now the delete form is a separate sibling element triggered via JavaScript from a non-submitting button.
+
+### Note
+If you previously clicked Delete and the transaction came back, this fix is why. Try again after deploy and it'll actually go.
+
 ## [0.6.9] — 2026-05-11
 
 ### Changed

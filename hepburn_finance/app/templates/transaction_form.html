@@ -137,15 +137,15 @@
     <div class="form-actions">
       <div>
         {% if tx %}
-        <form method="POST" action="{{ url_for('main.delete_transaction', tid=tx.id) }}" style="display:inline;"
-          onsubmit="return confirm('Delete this transaction permanently?');">
-          {% if filter_args %}
-            {% for key, value in filter_args.items() if value %}
-            <input type="hidden" name="_filter_{{ key }}" value="{{ value }}">
-            {% endfor %}
-          {% endif %}
-          <button type="submit" class="btn danger">Delete</button>
-        </form>
+        {# Delete button submits a hidden sibling form, NOT nested inside the
+           edit form. Nested <form> tags are invalid HTML and most browsers
+           silently strip the inner one — which used to send Delete clicks to
+           the edit endpoint instead of delete. Fixed by using a JS-triggered
+           submit on a form placed outside the edit form. #}
+        <button type="button" class="btn danger"
+          onclick="if (confirm('Delete this transaction permanently?')) { document.getElementById('delete-form').submit(); }">
+          Delete
+        </button>
         {% endif %}
       </div>
       <div class="form-actions-right">
@@ -154,5 +154,17 @@
       </div>
     </div>
   </form>
+
+  {% if tx %}
+  {# Sibling delete form — outside the edit form so the browser doesn't
+     ignore it. Triggered by the Delete button's onclick handler above. #}
+  <form id="delete-form" method="POST" action="{{ url_for('main.delete_transaction', tid=tx.id) }}" style="display:none;">
+    {% if filter_args %}
+      {% for key, value in filter_args.items() if value %}
+      <input type="hidden" name="_filter_{{ key }}" value="{{ value }}">
+      {% endfor %}
+    {% endif %}
+  </form>
+  {% endif %}
 </div>
 {% endblock %}
