@@ -702,7 +702,13 @@ def list_transactions():
         # 'Uncategorised', AND not yet manually tagged by the user.
         sql += (" AND (t.category IS NULL OR t.category = '' OR t.category = 'Uncategorised') "
                 "AND (t.user_categorised = 0 OR t.user_categorised IS NULL)")
-    sql += " ORDER BY t.date DESC, t.id DESC LIMIT 200"
+    # Sort to match Bendigo mobile app's order:
+    #   - Newest day at the top (date DESC)
+    #   - Within each day, oldest transaction first, newest last (id ASC)
+    # This way the dashboard's same-day order reads top-to-bottom in the same
+    # direction as the bank app — easier reconciliation. The id-asc tie-breaker
+    # works because CSV imports preserve chronological order in import-id.
+    sql += " ORDER BY t.date DESC, t.id ASC LIMIT 200"
 
     with get_db() as conn:
         txs = conn.execute(sql, params).fetchall()

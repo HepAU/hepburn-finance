@@ -2,6 +2,14 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.9] — 2026-05-11
+
+### Changed
+- **Transactions list now sorts to match the Bendigo mobile app's order.** Newest day at the top, but within each day the *oldest* transaction sits at the top with newer entries below — same direction as the bank app shows them. Makes reconciliation against the bank a top-to-bottom scan instead of a mental flip-flop.
+
+### Note on times
+Bendigo CSV exports include date only, no time-of-day. So within-day ordering is determined by the CSV's import order (which preserves Bendigo's natural export order via the auto-increment id). This works well in practice because Bendigo exports same-day transactions chronologically. If you spot a transaction out of order, that means it was either imported out-of-order or arrived in a separate CSV batch — let me know and we can revisit.
+
 ## [0.6.8] — 2026-05-11
 
 ### Added
