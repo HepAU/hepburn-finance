@@ -2,6 +2,16 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.13] — 2026-05-23
+
+### Changed
+- **Auto-detect transfers now matches on the bank's reference code first.** Bendigo (and most NPP/Osko/PayID transfers) emit a matching reference like `HOMN00020727990037` on both legs of an internal transfer. The new auto-detect runs a high-confidence pass first that pairs rows by `reference + magnitude + opposite sign + different accounts + dates within ±3 days` — far more reliable than guessing from same-date amounts alone. The original same-date matcher runs as a second pass to catch transfers that don't carry shared references (older imports, interbank pushes). The response JSON now reports `matched_by_reference` and `matched_by_date` separately so you can see what each pass found.
+
+### Added
+- **"Remember for future imports" checkbox on the transaction edit form.** When you correct a category on an edit, ticking this box (on by default) creates a rule that auto-categorises future CSV imports containing the same merchant. After a month or two of normal categorising, your rule set absorbs the recurring merchants and Uncategorised drops to the genuine long-tail — no more re-tagging Woolworths every month.
+- **Smart upsert on category rules.** Editing a transaction with an existing user-rule for that merchant: same category = no-op, different category = the existing rule is overwritten (not duplicated) and the activity log records the old → new change. Pattern derivation uses the bank's original description (`raw_description`), not your edited text — so the rule actually matches what future imports will look like.
+- **Transfer categories don't pollute rules.** When you mark a transaction as `Transfer · Internal`, no learning rule is created. Transfers are detected by other means (reference/date pairing) and don't belong in the merchant-rule pipeline.
+
 ## [0.6.12] — 2026-05-23
 
 ### Fixed
