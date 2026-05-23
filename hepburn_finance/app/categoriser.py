@@ -123,10 +123,34 @@ def _categorise_with_gemini(transactions, api_key):
 
 
 def add_user_rule(pattern, category, pattern_type='contains'):
-    """Add a user-defined rule. Higher priority than defaults."""
+    """Upsert a user-defined rule. Higher priority than defaults.
+
+    Returns a tuple (action, previous_category):
+      ('created', None)       — new rule inserted
+      ('updated', old_cat)    — existing user rule had a different category; updated
+      ('unchanged', category) — existing user rule already maps to this category
+      ('skipped', None)       — pattern is empty/None; no-op
+    """
+    if not pattern:
+        return ('skipped', None)
+    pat = pattern.upper()
     with get_db() as conn:
+        existing = conn.execute(
+            'SELECT id, category FROM category_rules '
+            'WHERE pattern=? AND pattern_type=? AND user_added=1',
+            (pat, pattern_type)
+        ).fetchone()
+        if existing is None:
+            conn.execute(
+                'INSERT INTO category_rules (pattern, pattern_type, category, priority, user_added) '
+                'VALUES (?, ?, ?, 200, 1)',
+                (pat, pattern_type, category)
+            )
+            return ('created', None)
+        if existing['category'] == category:
+            return ('unchanged', category)
         conn.execute(
-            'INSERT INTO category_rules (pattern, pattern_type, category, priority, user_added) '
-            'VALUES (?, ?, ?, 200, 1)',
-            (pattern.upper(), pattern_type, category)
+            'UPDATE category_rules SET category=? WHERE id=?',
+            (category, existing['id'])
         )
+        return ('updated', existing['category'])
