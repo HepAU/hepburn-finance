@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 
 from app.database import get_db, get_setting, set_setting
 from app.parsers import parse_csv
-from app.categoriser import categorise_batch, merchant_token
+from app.categoriser import categorise_batch, merchant_token, add_user_rule
 from app.balances import compute_account_balance
 from app.forecast import forecast_daily_balances, expand_bills, expand_transfers, parse_iso
 from app.stress import compute_stress, debt_attack_order
@@ -1152,6 +1152,12 @@ def edit_transaction(tid):
                     (tid,)
                 )
 
+            # The merchant token is derived from the ORIGINAL bank description
+            # (not the user's edited version), because future CSV imports will
+            # contain the bank's text again. Editing it to "NRMA Insurance —
+            # Car Premium" doesn't help match next month's "DIRECT DEBIT NRMA…".
+            source_desc_for_matching = tx['raw_description'] or tx['description']
+
             # Bulk apply: did they ask to apply this category to similar transactions?
             apply_to_similar = request.form.get('apply_to_similar')
             if apply_to_similar and new_category:
@@ -1159,7 +1165,7 @@ def edit_transaction(tid):
                 # token. Skips generic prefixes like DIRECT/EFTPOS/VISA so we
                 # don't tag every "DIRECT CREDIT" as the same category as a
                 # "DIRECT DEBIT" with the same generic first word.
-                token = merchant_token(tx['description'])
+                token = merchant_token(source_desc_for_matching)
                 if token:
                     like_pattern = '%' + token + '%'
                     cur = conn.execute(
@@ -1177,6 +1183,37 @@ def edit_transaction(tid):
                              f'Pattern: "{like_pattern}" → {new_category}')
                         )
 
+            # Rule learning: persist this categorisation as a category_rule so
+            # future imports of the same merchant get auto-tagged. Skipped for
+            # Uncategorised / empty categories and for transfers (those have
+            # their own dedicated category that shouldn't pollute rules).
+            learn_rule = request.form.get('learn_rule')
+            is_transfer_category = (new_category or '').lower().startswith('transfer')
+            should_learn = (
+                learn_rule
+                and new_category
+                and new_category.lower() != 'uncategorised'
+                and not is_transfer_category
+            )
+            if should_learn:
+                token = merchant_token(source_desc_for_matching)
+                if token:
+                    action, prev_category = add_user_rule(token, new_category, 'contains')
+                    if action == 'created':
+                        conn.execute(
+                            "INSERT INTO notifications_log (kind, title, body) VALUES (?,?,?)",
+                            ('rule_learned',
+                             f'New rule: "{token}" → {new_category}',
+                             'Future imports containing this merchant token will be auto-categorised.')
+                        )
+                    elif action == 'updated':
+                        conn.execute(
+                            "INSERT INTO notifications_log (kind, title, body) VALUES (?,?,?)",
+                            ('rule_updated',
+                             f'Rule changed: "{token}" {prev_category} → {new_category}',
+                             'Previous rule overwritten. Existing transactions keep their current category.')
+                        )
+
             # Preserve any list filters the user came from (account, category, search, uncat)
             filter_args = {}
             for key in ('account', 'cat', 'q', 'uncat'):
@@ -1187,9 +1224,10 @@ def edit_transaction(tid):
 
     # Find similar untagged transactions to offer bulk-tag. Uses the same
     # merchant-token logic as the bulk-apply path so the preview matches the
-    # actual UPDATE that runs on submit.
+    # actual UPDATE that runs on submit. Token derived from the bank's
+    # original description (raw_description) so it matches future imports too.
     similar = []
-    token = merchant_token(tx['description'])
+    token = merchant_token(tx['raw_description'] or tx['description'])
     if token:
         with get_db() as conn:
             similar = conn.execute(
@@ -1199,6 +1237,19 @@ def edit_transaction(tid):
                 "ORDER BY date DESC LIMIT 5",
                 (tid, f'%{token}%')
             ).fetchall()
+
+    # If a user rule already exists for this token, surface it so the user
+    # knows ticking "learn rule" will overwrite (not duplicate) it.
+    existing_rule = None
+    if token:
+        with get_db() as conn:
+            row = conn.execute(
+                'SELECT category FROM category_rules '
+                'WHERE pattern=? AND pattern_type=? AND user_added=1',
+                (token, 'contains')
+            ).fetchone()
+            if row:
+                existing_rule = row['category']
 
     # Accounts list for the destination-account dropdown (for transfers)
     with get_db() as conn:
@@ -1223,6 +1274,8 @@ def edit_transaction(tid):
         similar=[dict(s) for s in similar],
         accounts=[dict(a) for a in all_accounts],
         filter_args=filter_args,
+        merchant_preview=token,
+        existing_rule=existing_rule,
     )
 
 
@@ -1252,55 +1305,114 @@ def delete_transaction(tid):
 def detect_internal_transfers():
     """Pair-match internal transfers across the user's accounts.
 
-    Looks for transactions with same date, opposite-sign amounts of the
-    same magnitude, in different accounts. Marks both legs as
-    is_internal_transfer=1, links them via transfer_pair_id, and tags both
-    with category 'Transfer · Internal'.
+    Two passes:
 
-    Also handles the Bendigo case where descriptions are just numeric
-    reference codes — they don't need matching since they're already known
-    to be internal moves.
+    1. **Reference + magnitude.** Bendigo (and most NPP/PayID systems) emit
+       a matching reference code on both legs of an internal transfer
+       (e.g. HOMN00020727990037). Same reference + same magnitude + opposite
+       sign + different accounts + dates within 3 days is high-confidence —
+       far more reliable than guessing from date+amount alone.
+
+    2. **Date + magnitude (legacy fallback).** For rows with no reference or
+       whose reference didn't pair, fall back to the original same-date
+       opposite-sign cross-account match. Catches transfers between banks
+       that don't emit matching refs (e.g. interbank pushes).
+
+    Both passes mark both legs as is_internal_transfer=1, link them via
+    transfer_pair_id, and tag both with category 'Transfer · Internal'.
     """
-    matched_pairs = 0
+    from collections import defaultdict
+
+    def _link_pair(conn, a_id, b_id):
+        conn.execute(
+            "UPDATE transactions SET is_internal_transfer=1, "
+            "transfer_pair_id=?, category='Transfer · Internal', "
+            "user_categorised=1, updated_at=datetime('now') "
+            "WHERE id IN (?, ?)",
+            (b_id, a_id, b_id)
+        )
+        conn.execute(
+            "UPDATE transactions SET transfer_pair_id=? WHERE id=?",
+            (a_id, b_id)
+        )
+
+    matched_by_reference = 0
+    matched_by_date = 0
+    paired = set()
+
     with get_db() as conn:
-        # First pass: pair-match by date + magnitude across accounts
         rows = conn.execute(
-            "SELECT id, account_id, date, amount, description "
+            "SELECT id, account_id, date, amount, description, reference "
             "FROM transactions "
             "WHERE is_internal_transfer=0 OR is_internal_transfer IS NULL"
         ).fetchall()
 
-        # Index by (date, abs_amount) for quick pair-finding
-        from collections import defaultdict
-        buckets = defaultdict(list)
+        # ---- Pass 1: reference + magnitude (high confidence) ----
+        # Bucket by (reference, magnitude). Reference uniqueness comes from
+        # the bank's NPP/Osko/BPay infrastructure — same code on both legs.
+        ref_buckets = defaultdict(list)
         for r in rows:
-            key = (r['date'], round(abs(r['amount']), 2))
-            buckets[key].append(r)
+            ref = (r['reference'] or '').strip()
+            if not ref:
+                continue
+            key = (ref, round(abs(r['amount']), 2))
+            ref_buckets[key].append(r)
 
-        for key, candidates in buckets.items():
-            # Need at least one positive and one negative in different accounts
+        for key, candidates in ref_buckets.items():
             for i, a in enumerate(candidates):
-                for b in candidates[i+1:]:
-                    if (a['account_id'] != b['account_id']
-                            and ((a['amount'] > 0 and b['amount'] < 0)
-                                 or (a['amount'] < 0 and b['amount'] > 0))):
-                        # It's a match
-                        conn.execute(
-                            "UPDATE transactions SET is_internal_transfer=1, "
-                            "transfer_pair_id=?, category='Transfer · Internal', "
-                            "user_categorised=1, updated_at=datetime('now') "
-                            "WHERE id IN (?, ?)",
-                            (b['id'], a['id'], b['id'])
-                        )
-                        # Set b's pair to a
-                        conn.execute(
-                            "UPDATE transactions SET transfer_pair_id=? WHERE id=?",
-                            (a['id'], b['id'])
-                        )
-                        matched_pairs += 1
-                        break  # Only match each transaction once
+                if a['id'] in paired:
+                    continue
+                for b in candidates[i + 1:]:
+                    if b['id'] in paired:
+                        continue
+                    if a['account_id'] == b['account_id']:
+                        continue
+                    if not ((a['amount'] > 0 and b['amount'] < 0)
+                            or (a['amount'] < 0 and b['amount'] > 0)):
+                        continue
+                    # Date sanity: settlement can drift up to 3 days
+                    a_date = datetime.strptime(a['date'], '%Y-%m-%d')
+                    b_date = datetime.strptime(b['date'], '%Y-%m-%d')
+                    if abs((a_date - b_date).days) > 3:
+                        continue
+                    _link_pair(conn, a['id'], b['id'])
+                    paired.add(a['id'])
+                    paired.add(b['id'])
+                    matched_by_reference += 1
+                    break
 
-    return jsonify({'matched_pairs': matched_pairs})
+        # ---- Pass 2: date + magnitude (legacy fallback) ----
+        # Only considers rows the reference pass didn't already pair.
+        date_buckets = defaultdict(list)
+        for r in rows:
+            if r['id'] in paired:
+                continue
+            key = (r['date'], round(abs(r['amount']), 2))
+            date_buckets[key].append(r)
+
+        for key, candidates in date_buckets.items():
+            for i, a in enumerate(candidates):
+                if a['id'] in paired:
+                    continue
+                for b in candidates[i + 1:]:
+                    if b['id'] in paired:
+                        continue
+                    if a['account_id'] == b['account_id']:
+                        continue
+                    if not ((a['amount'] > 0 and b['amount'] < 0)
+                            or (a['amount'] < 0 and b['amount'] > 0)):
+                        continue
+                    _link_pair(conn, a['id'], b['id'])
+                    paired.add(a['id'])
+                    paired.add(b['id'])
+                    matched_by_date += 1
+                    break
+
+    return jsonify({
+        'matched_pairs': matched_by_reference + matched_by_date,
+        'matched_by_reference': matched_by_reference,
+        'matched_by_date': matched_by_date,
+    })
 
 
 def _reconcile_data(aid):

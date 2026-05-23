@@ -134,6 +134,25 @@
     </div>
     {% endif %}
 
+    {% if tx and merchant_preview %}
+    <div class="form-card" style="background: var(--bg-1); margin: 16px 0; padding: 14px;">
+      <h3 style="margin-top: 0; font-size: 14px;">🔁 Remember for future imports?</h3>
+      <p class="form-sub" style="margin-bottom: 12px;">
+        {% if existing_rule and existing_rule != tx.category %}
+          A rule already maps <code>{{ merchant_preview }}</code> → <strong>{{ existing_rule }}</strong>. Saving with this box ticked will <strong>overwrite</strong> that rule with your new category.
+        {% elif existing_rule %}
+          A rule already maps <code>{{ merchant_preview }}</code> → <strong>{{ existing_rule }}</strong>. No change needed if you keep this category.
+        {% else %}
+          Future transactions whose description contains <code>{{ merchant_preview }}</code> will be auto-categorised on import. Saves you re-tagging the same merchants every month.
+        {% endif %}
+      </p>
+      <div class="form-row checkbox-row" style="margin: 0;">
+        <input type="checkbox" name="learn_rule" id="learn_rule" checked>
+        <label for="learn_rule">Yes, create or update a rule for this merchant</label>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="form-actions">
       <div>
         {% if tx %}
