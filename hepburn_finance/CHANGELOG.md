@@ -2,6 +2,16 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.6.12] — 2026-05-23
+
+### Fixed
+- **Reconcile page now uses the v0.4.0 opening_balance model.** Previously the page compared the legacy `accounts.balance` column to a transaction sum that wrongly excluded internal transfers — so any account using the new opening-balance model would show a fake "difference" even when the data was perfectly correct. The reconcile now shows the system's *computed* balance (opening + all transactions including internal transfers — matching the headline you see on the dashboard) and lets you type your current real-world bank balance to see drift.
+- **Transfer counterparts now keep the bank reference code and transaction type.** When you tick "Internal transfer" and pick a destination account, the system creates a matching "ghost" transaction on the other side. That ghost was throwing away the Bendigo reference (`HOMN…`) and the transaction type. Both are now preserved on the row, and the reference is visible in the description: `Transfer from X · <your description> · ref Y`. Applies to fresh counterparts and to in-place edits of an existing counterpart.
+- **Bulk-apply "Tag similar" no longer over-matches generic banking prefixes.** Previously, editing a "DIRECT DEBIT NRMA" transaction and clicking *Apply to similar* would also tag every "DIRECT CREDIT SALARY" — because the matcher used the first whitespace-split word ("DIRECT") as the LIKE pattern. A new `merchant_token()` helper skips banking noise (DIRECT/DEBIT/CREDIT/EFTPOS/POS/VISA/MASTERCARD/BPAY/OSKO/PAYID/ATM/...) and picks the first meaningful merchant word. Both the bulk-apply UPDATE and the "Similar transactions" preview on the edit page now use the same logic — so what the preview shows is exactly what will be tagged.
+
+### Note on existing counterparts
+Counterparts already in the database before this fix don't have `reference` / `transaction_type` backfilled — only newly-created or re-edited counterparts pick up the fix. If you want to retroactively re-populate the old ones, ask and I'll write a one-off SQL.
+
 ## [0.6.11] — 2026-05-11
 
 ### Added
