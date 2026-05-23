@@ -6,7 +6,8 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 
 from app.database import get_db, get_setting, set_setting
 from app.parsers import parse_csv
-from app.categoriser import categorise_batch
+from app.categoriser import categorise_batch, merchant_token
+from app.balances import compute_account_balance
 from app.forecast import forecast_daily_balances, expand_bills, expand_transfers, parse_iso
 from app.stress import compute_stress, debt_attack_order
 from app.suggestions import smart_suggestions
@@ -1068,16 +1069,36 @@ def edit_transaction(tid):
             existing_pair_id = tx['transfer_pair_id']
             import hashlib
 
-            def _make_counterpart(dest_id, amt, desc, src_account_name, tx_date, tx_id):
+            # Reference + transaction_type carry across from the source row so
+            # the counterpart retains the bank-supplied metadata (Bendigo
+            # reference codes, "DIRECT DEBIT" tx types etc). The user-editable
+            # description is wrapped to keep the "Transfer from X" context
+            # while preserving whatever the user typed.
+            src_reference = tx['reference']
+            src_tx_type = tx['transaction_type']
+
+            def _counterpart_description(src_name, user_desc, reference):
+                parts = [f'Transfer from {src_name}']
+                if user_desc and user_desc.strip():
+                    parts.append(user_desc.strip())
+                if reference:
+                    parts.append(f'ref {reference}')
+                return ' · '.join(parts)
+
+            def _make_counterpart(dest_id, amt, desc, src_account_name, tx_date, tx_id,
+                                  reference, transaction_type):
                 """Create the matching transaction on the destination account."""
                 fp_input = f'pair|{tx_id}|{dest_id}|{tx_date}|{-amt}|{desc}'
                 fingerprint = hashlib.sha256(fp_input.encode()).hexdigest()
+                visible_desc = _counterpart_description(src_account_name, desc, reference)
                 cur = conn.execute(
                     "INSERT INTO transactions (account_id, date, amount, description, "
-                    "raw_description, category, notes, fingerprint, user_categorised, "
-                    "is_internal_transfer, transfer_pair_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                    (dest_id, tx_date, -amt, f'Transfer from {src_account_name}',
-                     desc, 'Transfer · Internal', None, fingerprint, 1, 1, tx_id)
+                    "raw_description, transaction_type, reference, category, notes, "
+                    "fingerprint, user_categorised, is_internal_transfer, transfer_pair_id) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (dest_id, tx_date, -amt, visible_desc,
+                     desc, transaction_type, reference,
+                     'Transfer · Internal', None, fingerprint, 1, 1, tx_id)
                 )
                 return cur.lastrowid
 
@@ -1095,8 +1116,11 @@ def edit_transaction(tid):
                         conn.execute(
                             "UPDATE transactions SET amount=?, "
                             "description=?, raw_description=?, "
+                            "reference=?, transaction_type=?, "
                             "updated_at=datetime('now') WHERE id=?",
-                            (-new_amount, f'Transfer from {src_name}', new_description, existing_pair_id)
+                            (-new_amount,
+                             _counterpart_description(src_name, new_description, src_reference),
+                             new_description, src_reference, src_tx_type, existing_pair_id)
                         )
                     else:
                         # Destination changed — delete old counterpart, create new
@@ -1104,7 +1128,7 @@ def edit_transaction(tid):
                             conn.execute('DELETE FROM transactions WHERE id=?', (existing_pair_id,))
                         new_pair_id = _make_counterpart(
                             destination_account_id, new_amount, new_description,
-                            src_name, tx['date'], tid
+                            src_name, tx['date'], tid, src_reference, src_tx_type
                         )
                         conn.execute(
                             "UPDATE transactions SET transfer_pair_id=? WHERE id=?",
@@ -1114,7 +1138,7 @@ def edit_transaction(tid):
                     # Create the counterpart
                     new_pair_id = _make_counterpart(
                         destination_account_id, new_amount, new_description,
-                        src_name, tx['date'], tid
+                        src_name, tx['date'], tid, src_reference, src_tx_type
                     )
                     conn.execute(
                         "UPDATE transactions SET transfer_pair_id=? WHERE id=?",
@@ -1131,24 +1155,27 @@ def edit_transaction(tid):
             # Bulk apply: did they ask to apply this category to similar transactions?
             apply_to_similar = request.form.get('apply_to_similar')
             if apply_to_similar and new_category:
-                # Match other uncategorised transactions with similar description
-                old_desc = tx['description']
-                # Use a robust LIKE match — strip down to first non-numeric word for matching
-                like_pattern = '%' + (old_desc.split()[0] if old_desc else old_desc) + '%'
-                cur = conn.execute(
-                    "UPDATE transactions SET category=?, user_categorised=1, "
-                    "updated_at=datetime('now') "
-                    "WHERE id != ? AND description LIKE ? "
-                    "AND (category IS NULL OR category='Uncategorised' OR user_categorised=0)",
-                    (new_category, tid, like_pattern)
-                )
-                affected = cur.rowcount
-                if affected > 0:
-                    conn.execute(
-                        "INSERT INTO notifications_log (kind, title, body) VALUES (?,?,?)",
-                        ('bulk_categorise', f'Tagged {affected} similar transactions',
-                         f'Pattern: "{like_pattern}" → {new_category}')
+                # Match other uncategorised transactions by a meaningful merchant
+                # token. Skips generic prefixes like DIRECT/EFTPOS/VISA so we
+                # don't tag every "DIRECT CREDIT" as the same category as a
+                # "DIRECT DEBIT" with the same generic first word.
+                token = merchant_token(tx['description'])
+                if token:
+                    like_pattern = '%' + token + '%'
+                    cur = conn.execute(
+                        "UPDATE transactions SET category=?, user_categorised=1, "
+                        "updated_at=datetime('now') "
+                        "WHERE id != ? AND UPPER(description) LIKE ? "
+                        "AND (category IS NULL OR category='Uncategorised' OR user_categorised=0)",
+                        (new_category, tid, like_pattern)
                     )
+                    affected = cur.rowcount
+                    if affected > 0:
+                        conn.execute(
+                            "INSERT INTO notifications_log (kind, title, body) VALUES (?,?,?)",
+                            ('bulk_categorise', f'Tagged {affected} similar transactions',
+                             f'Pattern: "{like_pattern}" → {new_category}')
+                        )
 
             # Preserve any list filters the user came from (account, category, search, uncat)
             filter_args = {}
@@ -1158,19 +1185,20 @@ def edit_transaction(tid):
                     filter_args[key] = val
             return redirect(url_for('main.list_transactions', **filter_args))
 
-    # Find similar untagged transactions to offer bulk-tag
+    # Find similar untagged transactions to offer bulk-tag. Uses the same
+    # merchant-token logic as the bulk-apply path so the preview matches the
+    # actual UPDATE that runs on submit.
     similar = []
-    if tx['description']:
-        first_word = tx['description'].split()[0] if tx['description'] else ''
-        if first_word:
-            with get_db() as conn:
-                similar = conn.execute(
-                    "SELECT id, description, amount, date FROM transactions "
-                    "WHERE id != ? AND description LIKE ? "
-                    "AND (category IS NULL OR category='Uncategorised' OR user_categorised=0) "
-                    "ORDER BY date DESC LIMIT 5",
-                    (tid, f'%{first_word}%')
-                ).fetchall()
+    token = merchant_token(tx['description'])
+    if token:
+        with get_db() as conn:
+            similar = conn.execute(
+                "SELECT id, description, amount, date FROM transactions "
+                "WHERE id != ? AND UPPER(description) LIKE ? "
+                "AND (category IS NULL OR category='Uncategorised' OR user_categorised=0) "
+                "ORDER BY date DESC LIMIT 5",
+                (tid, f'%{token}%')
+            ).fetchall()
 
     # Accounts list for the destination-account dropdown (for transfers)
     with get_db() as conn:
@@ -1275,24 +1303,30 @@ def detect_internal_transfers():
     return jsonify({'matched_pairs': matched_pairs})
 
 
-@bp.route('/accounts/<int:aid>/reconcile')
-def reconcile_account_view(aid):
-    """Show a reconciliation report for an account: manual balance vs tx sum."""
+def _reconcile_data(aid):
+    """Compute reconciliation figures for an account using the v0.4.0
+    opening_balance model. Returns a dict or None if the account is missing.
+
+    Computed balance = opening_balance + sum(ALL transactions including
+    internal transfers) — matches app.balances.compute_account_balance.
+    Manual reference = the user-supplied current bank balance (`current_balance`
+    query param) when provided, otherwise the legacy `accounts.balance` column.
+    """
     with get_db() as conn:
         acc = conn.execute('SELECT * FROM accounts WHERE id=?', (aid,)).fetchone()
         if not acc:
-            return 'Not found', 404
-        tx_sum = conn.execute(
+            return None
+        tx_sum_all = conn.execute(
+            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE account_id=?',
+            (aid,)
+        ).fetchone()[0]
+        tx_sum_external = conn.execute(
             'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE account_id=? '
             'AND (is_internal_transfer=0 OR is_internal_transfer IS NULL)',
             (aid,)
         ).fetchone()[0]
-        tx_sum_with_internal = conn.execute(
-            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE account_id=?',
-            (aid,)
-        ).fetchone()[0]
         first_tx = conn.execute(
-            'SELECT date, amount FROM transactions WHERE account_id=? ORDER BY date ASC LIMIT 1',
+            'SELECT date FROM transactions WHERE account_id=? ORDER BY date ASC LIMIT 1',
             (aid,)
         ).fetchone()
         last_tx = conn.execute(
@@ -1303,49 +1337,100 @@ def reconcile_account_view(aid):
             'SELECT COUNT(*) FROM transactions WHERE account_id=?',
             (aid,)
         ).fetchone()[0]
+        computed_balance = compute_account_balance(acc, conn=conn)
+
+    return {
+        'account': dict(acc),
+        'computed_balance': round(computed_balance, 2),
+        'tx_sum_all': round(tx_sum_all, 2),
+        'tx_sum_external': round(tx_sum_external, 2),
+        'tx_count': tx_count,
+        'first_tx_date': first_tx['date'] if first_tx else None,
+        'last_tx_date': last_tx['date'] if last_tx else None,
+    }
+
+
+@bp.route('/accounts/<int:aid>/reconcile')
+def reconcile_account_view(aid):
+    """Show a reconciliation report: the system's computed balance vs the
+    user's current real-world balance. The user can enter today's bank
+    balance via the `current_balance` query param to see drift."""
+    data = _reconcile_data(aid)
+    if data is None:
+        return 'Not found', 404
+
+    raw_current = request.args.get('current_balance', '').strip()
+    user_current_balance = None
+    if raw_current:
+        try:
+            user_current_balance = float(raw_current)
+        except ValueError:
+            user_current_balance = None
+
+    # Manual reference: explicit user-entered value > legacy balance column
+    reference_balance = (
+        user_current_balance
+        if user_current_balance is not None
+        else data['account'].get('balance')
+    )
+    difference = None
+    if reference_balance is not None:
+        difference = round(data['computed_balance'] - reference_balance, 2)
 
     return render_template(
         'reconcile.html',
-        account=dict(acc),
-        tx_sum=round(tx_sum, 2),
-        tx_sum_with_internal=round(tx_sum_with_internal, 2),
-        tx_count=tx_count,
-        first_tx_date=first_tx['date'] if first_tx else None,
-        last_tx_date=last_tx['date'] if last_tx else None,
-        difference=round(acc['balance'] - tx_sum, 2),
+        account=data['account'],
+        computed_balance=data['computed_balance'],
+        tx_sum_all=data['tx_sum_all'],
+        tx_sum_external=data['tx_sum_external'],
+        tx_count=data['tx_count'],
+        first_tx_date=data['first_tx_date'],
+        last_tx_date=data['last_tx_date'],
+        user_current_balance=user_current_balance,
+        reference_balance=reference_balance,
+        difference=difference,
     )
 
 
 @bp.route('/transactions/reconcile/<int:aid>')
 def reconcile_account(aid):
-    """Compare manual balance to transaction-derived balance for an account."""
-    with get_db() as conn:
-        acc = conn.execute('SELECT * FROM accounts WHERE id=?', (aid,)).fetchone()
-        if not acc:
-            return 'Not found', 404
-        tx_sum = conn.execute(
-            'SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE account_id=?',
-            (aid,)
-        ).fetchone()[0]
-        first_tx = conn.execute(
-            'SELECT date, amount FROM transactions WHERE account_id=? '
-            'ORDER BY date ASC LIMIT 1',
-            (aid,)
-        ).fetchone()
-        last_tx = conn.execute(
-            'SELECT date FROM transactions WHERE account_id=? '
-            'ORDER BY date DESC LIMIT 1',
-            (aid,)
-        ).fetchone()
+    """JSON: computed balance vs reference. Pass ?current_balance=… to set
+    the reference, otherwise the legacy accounts.balance column is used."""
+    data = _reconcile_data(aid)
+    if data is None:
+        return 'Not found', 404
+
+    raw_current = request.args.get('current_balance', '').strip()
+    user_current_balance = None
+    if raw_current:
+        try:
+            user_current_balance = float(raw_current)
+        except ValueError:
+            user_current_balance = None
+
+    reference_balance = (
+        user_current_balance
+        if user_current_balance is not None
+        else data['account'].get('balance')
+    )
+    difference = None
+    if reference_balance is not None:
+        difference = round(data['computed_balance'] - reference_balance, 2)
 
     return jsonify({
         'account_id': aid,
-        'name': acc['name'],
-        'manual_balance': acc['balance'],
-        'tx_sum': round(tx_sum, 2),
-        'difference': round(acc['balance'] - tx_sum, 2),
-        'first_tx_date': first_tx['date'] if first_tx else None,
-        'last_tx_date': last_tx['date'] if last_tx else None,
+        'name': data['account']['name'],
+        'computed_balance': data['computed_balance'],
+        'opening_balance': data['account'].get('opening_balance'),
+        'balance_last_updated': data['account'].get('balance_last_updated'),
+        'tx_sum_all': data['tx_sum_all'],
+        'tx_sum_external': data['tx_sum_external'],
+        'reference_balance': reference_balance,
+        'reference_source': 'user' if user_current_balance is not None else 'legacy_balance',
+        'difference': difference,
+        'tx_count': data['tx_count'],
+        'first_tx_date': data['first_tx_date'],
+        'last_tx_date': data['last_tx_date'],
     })
 
 
