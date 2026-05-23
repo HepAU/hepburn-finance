@@ -393,9 +393,12 @@ def run_migrations(conn):
 
     # 0.4.0: balance-lock model. Add opening_balance and balance_last_updated.
     # When opening_balance is non-null, the displayed balance is computed from
-    # opening_balance + sum(non-internal transactions). The legacy `balance`
-    # column stays as a fallback for accounts that never get a real opening
-    # value set (manual mode).
+    # opening_balance + sum(ALL transactions, including internal transfers).
+    # See app/balances.py:compute_account_balance for the canonical formula —
+    # opening_balance already reflects every bank movement (transfers included),
+    # so excluding internal transfers from the sum would double-correct them.
+    # The legacy `balance` column stays as a fallback for accounts that never
+    # get a real opening value set (manual mode).
     #
     # Migration strategy: copy current `balance` into `opening_balance` for
     # every existing account and set balance_last_updated to now. From this

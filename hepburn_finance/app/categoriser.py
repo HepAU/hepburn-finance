@@ -8,6 +8,43 @@ import re
 from app.database import get_db
 
 
+# Tokens that appear at the start of bank descriptions but say nothing about
+# the merchant. Used by merchant_token() — if the first word of a description
+# is one of these, we skip past it to find a meaningful identifier.
+_GENERIC_DESCRIPTION_TOKENS = frozenset({
+    'DIRECT', 'DEBIT', 'CREDIT', 'EFTPOS', 'POS', 'VISA', 'MASTERCARD',
+    'PURCHASE', 'PAYMENT', 'TRANSFER', 'WITHDRAWAL', 'DEPOSIT', 'REFUND',
+    'INTERNET', 'BPAY', 'OSKO', 'PAYID', 'NPP', 'ATM', 'CHQ', 'CHEQUE',
+    'FROM', 'TO', 'AT',
+})
+
+
+def merchant_token(description):
+    """Return a stable merchant-identifying token from a transaction description.
+
+    Strips banking prefixes like 'DIRECT DEBIT' / 'EFTPOS PURCHASE' / 'VISA'
+    and returns the first remaining alphabetic token of length >= 3, upper-cased.
+    Returns None if no usable token is found.
+
+    Used for bulk-tagging similar transactions and (in future) for auto-creating
+    category rules from user edits.
+    """
+    if not description:
+        return None
+    for tok in description.upper().split():
+        # Strip leading/trailing non-alpha (e.g. "WOOLWORTHS:" → "WOOLWORTHS",
+        # "*MERCHANT" → "MERCHANT") but bail on internal mixes like "PYM123".
+        stripped = tok.strip('.,:;*#-/()[]"\'')
+        if not stripped.isalpha():
+            continue
+        if len(stripped) < 3:
+            continue
+        if stripped in _GENERIC_DESCRIPTION_TOKENS:
+            continue
+        return stripped
+    return None
+
+
 def categorise_by_rules(description, transaction_type=''):
     """Apply category rules from the database. Returns category string or None."""
     desc_upper = description.upper()

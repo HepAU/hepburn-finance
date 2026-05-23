@@ -12,7 +12,7 @@
   <div class="topbar">
     <div>
       <h1>Reconcile · {{ account.name }}</h1>
-      <p>Compare the balance you entered manually with the sum of transactions imported from CSV.</p>
+      <p>Compare the system's computed balance to your real-world bank balance.</p>
     </div>
     <a class="btn ghost" href="{{ url_for('main.dashboard') }}">← Back to dashboard</a>
   </div>
@@ -28,40 +28,73 @@
       </div>
     </div>
     {% else %}
+
     <div class="form-grid-2">
       <div class="form-row">
-        <label>Manual balance (what you entered)</label>
+        <label>Computed balance (system view)</label>
         <div style="font-size: 22px; font-weight: 500; padding: 8px 0; font-feature-settings: 'tnum';">
-          {{ fmt_money(account.balance) }}
+          {{ fmt_money(computed_balance) }}
         </div>
+        <p class="form-sub" style="margin-top:4px;">
+          {% if account.opening_balance is not none %}
+            Opening {{ fmt_money(account.opening_balance) }}
+            {% if account.balance_last_updated %}as of {{ account.balance_last_updated[:10] }}{% endif %}
+            + {{ tx_count }} transactions ({{ fmt_money(tx_sum_all) }}).
+          {% else %}
+            Legacy mode: no opening balance set. Edit the account to set one.
+          {% endif %}
+        </p>
       </div>
       <div class="form-row">
-        <label>Sum of transactions (excluding internal)</label>
+        <label>Reference balance{% if reference_source == 'user' %} (you entered){% else %} (last saved){% endif %}</label>
         <div style="font-size: 22px; font-weight: 500; padding: 8px 0; font-feature-settings: 'tnum';">
-          {{ fmt_money(tx_sum) }}
+          {{ fmt_money(reference_balance) }}
         </div>
+        <p class="form-sub" style="margin-top:4px;">
+          {% if reference_source == 'user' %}
+            From the input below.
+          {% else %}
+            From the legacy <code>accounts.balance</code> column — may be stale.
+          {% endif %}
+        </p>
       </div>
     </div>
 
+    {% if difference is not none %}
     <div class="reconcile-banner {% if difference|abs < 0.01 %}match{% endif %}">
       {% if difference|abs < 0.01 %}
-      <div>✓ <strong>Balances match exactly.</strong> The transactions add up to the manual balance figure.</div>
+      <div>✓ <strong>Reconciled.</strong> The system's view matches the reference balance.</div>
       {% else %}
       <div>
-        <strong>Difference: {{ fmt_money(difference) }}</strong><br>
+        <strong>Difference: {{ fmt_money(difference) }}</strong>
+        ({% if difference > 0 %}system shows more than reference{% else %}system shows less than reference{% endif %})<br>
         <span style="font-size: 11px;">
-          This is normal if your CSV history doesn't go back to when the account was opened.
-          The manual balance is your "today" figure; the tx sum is just the imported transactions.
+          Likely causes: missing or duplicated CSV import, a transfer counterpart created when one shouldn't have been, or your opening balance is stale.
         </span>
       </div>
       {% endif %}
     </div>
+    {% endif %}
+
+    <form method="GET" action="{{ url_for('main.reconcile_account_view', aid=account.id) }}" class="form-grid-2" style="margin-top:16px;">
+      <div class="form-row">
+        <label for="current_balance">Enter your current bank balance to compare</label>
+        <input type="number" step="0.01" name="current_balance" id="current_balance"
+               value="{{ user_current_balance if user_current_balance is not none else '' }}"
+               placeholder="e.g. 1234.56">
+        <p class="form-sub" style="margin-top:4px;">Check your bank app right now and type the balance shown.</p>
+      </div>
+      <div class="form-row" style="align-self:end;">
+        <button class="btn primary" type="submit">Compare</button>
+      </div>
+    </form>
 
     <div style="margin-top: 20px; font-size: 12px; color: var(--text-3);">
       <strong>Transactions:</strong> {{ tx_count }} total<br>
       {% if first_tx_date %}<strong>Oldest:</strong> {{ first_tx_date }}<br>{% endif %}
       {% if last_tx_date %}<strong>Newest:</strong> {{ last_tx_date }}<br>{% endif %}
-      <strong>Sum including internal transfers:</strong> {{ fmt_money(tx_sum_with_internal) }}
+      <strong>Sum of all transactions:</strong> {{ fmt_money(tx_sum_all) }}<br>
+      <strong>Sum excluding internal transfers:</strong> {{ fmt_money(tx_sum_external) }}
     </div>
     {% endif %}
 
