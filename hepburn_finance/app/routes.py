@@ -1198,7 +1198,11 @@ def edit_transaction(tid):
             if should_learn:
                 token = merchant_token(source_desc_for_matching)
                 if token:
-                    action, prev_category = add_user_rule(token, new_category, 'contains')
+                    # Reuse the active connection so we don't open a second
+                    # one and deadlock on the write lock held by this handler.
+                    action, prev_category = add_user_rule(
+                        token, new_category, 'contains', conn=conn
+                    )
                     if action == 'created':
                         conn.execute(
                             "INSERT INTO notifications_log (kind, title, body) VALUES (?,?,?)",

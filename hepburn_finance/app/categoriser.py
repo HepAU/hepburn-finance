@@ -122,8 +122,12 @@ def _categorise_with_gemini(transactions, api_key):
     pass
 
 
-def add_user_rule(pattern, category, pattern_type='contains'):
+def add_user_rule(pattern, category, pattern_type='contains', conn=None):
     """Upsert a user-defined rule. Higher priority than defaults.
+
+    Pass `conn` to participate in an existing transaction (e.g. when called
+    from inside an edit_transaction handler that already holds the write
+    lock). When `conn` is None, opens its own short-lived connection.
 
     Returns a tuple (action, previous_category):
       ('created', None)       — new rule inserted
@@ -134,14 +138,15 @@ def add_user_rule(pattern, category, pattern_type='contains'):
     if not pattern:
         return ('skipped', None)
     pat = pattern.upper()
-    with get_db() as conn:
-        existing = conn.execute(
+
+    def _do(c):
+        existing = c.execute(
             'SELECT id, category FROM category_rules '
             'WHERE pattern=? AND pattern_type=? AND user_added=1',
             (pat, pattern_type)
         ).fetchone()
         if existing is None:
-            conn.execute(
+            c.execute(
                 'INSERT INTO category_rules (pattern, pattern_type, category, priority, user_added) '
                 'VALUES (?, ?, ?, 200, 1)',
                 (pat, pattern_type, category)
@@ -149,8 +154,13 @@ def add_user_rule(pattern, category, pattern_type='contains'):
             return ('created', None)
         if existing['category'] == category:
             return ('unchanged', category)
-        conn.execute(
+        c.execute(
             'UPDATE category_rules SET category=? WHERE id=?',
             (category, existing['id'])
         )
         return ('updated', existing['category'])
+
+    if conn is not None:
+        return _do(conn)
+    with get_db() as new_conn:
+        return _do(new_conn)
