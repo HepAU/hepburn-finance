@@ -2,6 +2,22 @@
 
 All notable changes to Hepburn Finance.
 
+## [0.7.0] — 2026-05-23
+
+### Added
+- **Afterpay tracker** at `/afterpay` (also linked from the dashboard top bar). Shows every active Afterpay order grouped onto one compact card per purchase: store name, total, 4 instalment pips with date + amount, count of paid vs remaining. Designed for the common case of 5–6 concurrent Afterpays — they all fit on a phone screen. Tap any pip to mark that instalment paid (or un-paid); paid pips turn green, overdue pips turn red, fully-paid orders get a "PAID OFF" badge.
+- **Auto-match payments** button on the Afterpay page. Scans the last 90 days of transactions categorised as Afterpay (or with `AFTERPAY` in the description) and links them to unpaid instalments by amount (±$0.50) and date (±7 days). Best-score wins; one transaction never gets claimed by two pips. Run it once after first launch to retroactively flag already-paid instalments without tapping them one by one.
+- **Archive toggle** for the Afterpay list. Once an order is fully paid you can archive it to keep the active view clean; archived orders are reachable via a count pill at the top of the page and can be un-archived if needed.
+- **Header summary** at the top of the Afterpay page: total outstanding across all active orders, next payment date + amount, and total due in the next 14 days.
+
+### Fixed
+- **500 Internal Server Error when saving a transaction edit.** The rule-learning code added in 0.6.13 opened a second SQLite connection to write the new rule while the outer edit handler still held the write lock from earlier updates in the same request. The inner connection timed out waiting for the lock and Flask returned 500. `add_user_rule()` now accepts an optional `conn` parameter (matching the pattern `balances.compute_account_balance` already uses), and `edit_transaction` passes the active connection through so both operations share one transaction. No more deadlock.
+
+### Schema (0.7.0 migration)
+- New `afterpay_orders` table with `store`, `total_amount`, `purchase_date`, `instalment_count`, `account_id`, `archived`.
+- New columns on `scheduled_bills`: `afterpay_order_id`, `afterpay_seq`, `afterpay_paid`, `afterpay_paid_at` — link each instalment back to its parent order and track per-instalment paid state.
+- **Automatic backfill** on first launch: any existing bills named `Afterpay · {store} ({n} of {total})` are grouped into proper `afterpay_orders` entries and linked. Past-dated instalments are auto-marked paid (best-guess — you've presumably been paying them). Run it once and your existing Afterpays will appear pre-populated.
+
 ## [0.6.13] — 2026-05-23
 
 ### Changed
