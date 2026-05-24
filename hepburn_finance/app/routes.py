@@ -495,14 +495,114 @@ def delete_bill(bid):
     return redirect(url_for('main.dashboard'))
 
 
-# ---------- Afterpay shortcut ----------
+# ---------- Afterpay ----------
+
+@bp.route('/afterpay')
+def list_afterpay():
+    """List all active Afterpay orders, grouped, with per-instalment paid pips.
+    Archived orders hidden by default; shown when ?archived=1 is passed."""
+    show_archived = request.args.get('archived') == '1'
+    with get_db() as conn:
+        orders = conn.execute(
+            "SELECT o.*, a.name AS account_name, a.bank AS account_bank "
+            "FROM afterpay_orders o "
+            "LEFT JOIN accounts a ON o.account_id = a.id "
+            "WHERE o.archived = ? "
+            "ORDER BY o.purchase_date DESC, o.id DESC",
+            (1 if show_archived else 0,)
+        ).fetchall()
+
+        # Pull every instalment for these orders in one query (no N+1)
+        if orders:
+            oids = [o['id'] for o in orders]
+            placeholders = ','.join('?' * len(oids))
+            instal_rows = conn.execute(
+                f"SELECT id, afterpay_order_id, afterpay_seq, amount, next_date, "
+                f"afterpay_paid, afterpay_paid_at "
+                f"FROM scheduled_bills "
+                f"WHERE afterpay_order_id IN ({placeholders}) "
+                f"ORDER BY afterpay_order_id, afterpay_seq",
+                oids
+            ).fetchall()
+        else:
+            instal_rows = []
+
+        # Counts for the archived/active toggle pill
+        archived_count = conn.execute(
+            "SELECT COUNT(*) FROM afterpay_orders WHERE archived=1"
+        ).fetchone()[0]
+        active_count = conn.execute(
+            "SELECT COUNT(*) FROM afterpay_orders WHERE archived=0"
+        ).fetchone()[0]
+
+    # Group instalments under their parent order
+    by_order = {}
+    for ir in instal_rows:
+        by_order.setdefault(ir['afterpay_order_id'], []).append(dict(ir))
+
+    today_iso = date.today().isoformat()
+    order_list = []
+    total_outstanding = 0.0
+    next_payment_date = None
+    next_payment_amount = 0.0
+    due_14d_total = 0.0
+    in_14d = (date.today() + timedelta(days=14)).isoformat()
+
+    for o in orders:
+        instals = by_order.get(o['id'], [])
+        paid_total = sum(abs(i['amount']) for i in instals if i['afterpay_paid'])
+        outstanding = round(o['total_amount'] - paid_total, 2)
+        next_unpaid = next(
+            (i for i in instals if not i['afterpay_paid']), None
+        )
+        overdue_count = sum(
+            1 for i in instals
+            if not i['afterpay_paid'] and i['next_date'] < today_iso
+        )
+        if next_unpaid:
+            total_outstanding += outstanding
+            # The next due date across all orders
+            if (next_payment_date is None
+                    or next_unpaid['next_date'] < next_payment_date):
+                next_payment_date = next_unpaid['next_date']
+                next_payment_amount = abs(next_unpaid['amount'])
+            for i in instals:
+                if (not i['afterpay_paid']
+                        and i['next_date'] <= in_14d
+                        and i['next_date'] >= today_iso):
+                    due_14d_total += abs(i['amount'])
+        order_list.append({
+            'order': dict(o),
+            'instalments': instals,
+            'paid_count': sum(1 for i in instals if i['afterpay_paid']),
+            'paid_total': round(paid_total, 2),
+            'outstanding': outstanding,
+            'next_unpaid': next_unpaid,
+            'overdue_count': overdue_count,
+            'is_complete': all(i['afterpay_paid'] for i in instals) and len(instals) > 0,
+        })
+
+    return render_template(
+        'afterpay_list.html',
+        orders=order_list,
+        show_archived=show_archived,
+        active_count=active_count,
+        archived_count=archived_count,
+        total_outstanding=round(total_outstanding, 2),
+        next_payment_date=next_payment_date,
+        next_payment_amount=round(next_payment_amount, 2),
+        due_14d_total=round(due_14d_total, 2),
+        today_iso=today_iso,
+    )
+
 
 @bp.route('/afterpay/new', methods=['GET', 'POST'])
 def new_afterpay():
-    """Quick form: total amount + first instalment date + store + account.
-    Creates 4 fortnightly bills as a single fixed series.
-    Each instalment is a separate one-off bill so they show distinctly on the calendar.
-    """
+    """Quick form: store + total + first instalment date + account.
+    Creates an afterpay_orders row plus N fortnightly scheduled_bills, all
+    linked via afterpay_order_id so the /afterpay list view can group them.
+    Each instalment is its own one-off bill so the calendar/forecast still
+    shows them distinctly."""
     if request.method == 'POST':
         store = request.form['store'].strip()
         total = float(request.form['total'])
@@ -520,13 +620,19 @@ def new_afterpay():
 
         from datetime import timedelta as _td
         with get_db() as conn:
+            cur = conn.execute(
+                "INSERT INTO afterpay_orders (store, total_amount, purchase_date, "
+                "instalment_count, account_id) VALUES (?,?,?,?,?)",
+                (store, total, first_date.isoformat(), instalments, account_id)
+            )
+            order_id = cur.lastrowid
             for i in range(instalments):
                 instal_date = first_date + _td(days=14 * i)
                 amt = per_instalment if i < instalments - 1 else last_instalment
                 conn.execute(
                     'INSERT INTO scheduled_bills (name, amount, next_date, recurring, '
-                    'category, account_id, is_income) '
-                    'VALUES (?,?,?,?,?,?,?)',
+                    'category, account_id, is_income, afterpay_order_id, afterpay_seq) '
+                    'VALUES (?,?,?,?,?,?,?,?,?)',
                     (
                         f'Afterpay · {store} ({i+1} of {instalments})',
                         -abs(amt),
@@ -535,9 +641,11 @@ def new_afterpay():
                         'Buy Now Pay Later · Afterpay',
                         account_id,
                         0,
+                        order_id,
+                        i + 1,
                     )
                 )
-        return redirect(url_for('main.dashboard'))
+        return redirect(url_for('main.list_afterpay'))
 
     with get_db() as conn:
         accounts = conn.execute(
@@ -548,6 +656,128 @@ def new_afterpay():
         accounts=accounts,
         today_iso=date.today().isoformat(),
     )
+
+
+@bp.route('/afterpay/<int:oid>/archive', methods=['POST'])
+def archive_afterpay(oid):
+    """Hide an order from the active list (e.g. when fully paid). Reversible."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE afterpay_orders SET archived=1, updated_at=datetime('now') WHERE id=?",
+            (oid,)
+        )
+    return redirect(url_for('main.list_afterpay'))
+
+
+@bp.route('/afterpay/<int:oid>/unarchive', methods=['POST'])
+def unarchive_afterpay(oid):
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE afterpay_orders SET archived=0, updated_at=datetime('now') WHERE id=?",
+            (oid,)
+        )
+    return redirect(url_for('main.list_afterpay', archived=1))
+
+
+@bp.route('/afterpay/<int:oid>/delete', methods=['POST'])
+def delete_afterpay(oid):
+    """Delete the order and all its linked scheduled_bills. Use sparingly —
+    archive is usually what you want."""
+    with get_db() as conn:
+        conn.execute(
+            'DELETE FROM scheduled_bills WHERE afterpay_order_id=?', (oid,)
+        )
+        conn.execute('DELETE FROM afterpay_orders WHERE id=?', (oid,))
+    return redirect(url_for('main.list_afterpay'))
+
+
+@bp.route('/afterpay/payments/<int:bill_id>/toggle-paid', methods=['POST'])
+def toggle_afterpay_payment(bill_id):
+    """Flip the afterpay_paid flag on a single instalment bill. Sets paid_at
+    to today when flipping on; clears it when flipping off."""
+    with get_db() as conn:
+        row = conn.execute(
+            'SELECT afterpay_paid, afterpay_order_id FROM scheduled_bills WHERE id=?',
+            (bill_id,)
+        ).fetchone()
+        if row is None:
+            return 'Not found', 404
+        if row['afterpay_paid']:
+            conn.execute(
+                "UPDATE scheduled_bills SET afterpay_paid=0, afterpay_paid_at=NULL, "
+                "updated_at=datetime('now') WHERE id=?",
+                (bill_id,)
+            )
+        else:
+            conn.execute(
+                "UPDATE scheduled_bills SET afterpay_paid=1, "
+                "afterpay_paid_at=datetime('now'), updated_at=datetime('now') WHERE id=?",
+                (bill_id,)
+            )
+    return redirect(url_for('main.list_afterpay'))
+
+
+@bp.route('/afterpay/auto-match', methods=['POST'])
+def auto_match_afterpay():
+    """Scan recent Afterpay-categorised transactions and link them to unpaid
+    instalments by amount + date proximity. Matches within ±$0.50 amount and
+    ±7 days from due date. Idempotent — won't re-match already-paid bills."""
+    matched = 0
+    with get_db() as conn:
+        unpaid = conn.execute(
+            "SELECT id, afterpay_order_id, amount, next_date FROM scheduled_bills "
+            "WHERE afterpay_order_id IS NOT NULL AND (afterpay_paid=0 OR afterpay_paid IS NULL) "
+            "ORDER BY next_date ASC"
+        ).fetchall()
+        # Candidate transactions: categorised as Afterpay (any subcategory) OR
+        # description containing AFTERPAY. Last 90 days to keep the scan cheap.
+        cutoff = (date.today() - timedelta(days=90)).isoformat()
+        candidates = conn.execute(
+            "SELECT id, date, amount, description FROM transactions "
+            "WHERE date >= ? AND ("
+            "  UPPER(category) LIKE '%AFTERPAY%' "
+            "  OR UPPER(description) LIKE '%AFTERPAY%' "
+            ")",
+            (cutoff,)
+        ).fetchall()
+        # Track which transactions have been claimed in this pass so we don't
+        # link one transaction to two unpaid instalments.
+        used_tx_ids = set()
+        for u in unpaid:
+            u_amt = abs(u['amount'])
+            u_date = datetime.strptime(u['next_date'], '%Y-%m-%d').date()
+            best = None
+            best_score = None
+            for c in candidates:
+                if c['id'] in used_tx_ids:
+                    continue
+                c_amt = abs(c['amount'])
+                if abs(c_amt - u_amt) > 0.50:
+                    continue
+                c_date = datetime.strptime(c['date'], '%Y-%m-%d').date()
+                day_drift = abs((c_date - u_date).days)
+                if day_drift > 7:
+                    continue
+                # Score: prefer closer date + closer amount
+                score = day_drift + abs(c_amt - u_amt)
+                if best is None or score < best_score:
+                    best = c
+                    best_score = score
+            if best is not None:
+                conn.execute(
+                    "UPDATE scheduled_bills SET afterpay_paid=1, "
+                    "afterpay_paid_at=?, updated_at=datetime('now') WHERE id=?",
+                    (best['date'], u['id'])
+                )
+                used_tx_ids.add(best['id'])
+                matched += 1
+        if matched > 0:
+            conn.execute(
+                "INSERT INTO notifications_log (kind, title, body) VALUES (?,?,?)",
+                ('afterpay_automatch', f'Auto-matched {matched} Afterpay instalment{"s" if matched != 1 else ""}',
+                 'Scanned recent transactions categorised as Afterpay and linked them to unpaid instalments.')
+            )
+    return redirect(url_for('main.list_afterpay'))
 
 
 

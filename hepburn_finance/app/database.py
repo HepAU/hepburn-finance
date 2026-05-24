@@ -146,6 +146,20 @@ CREATE TABLE IF NOT EXISTS spending_budgets (
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS afterpay_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    store TEXT NOT NULL,
+    total_amount REAL NOT NULL,
+    purchase_date TEXT NOT NULL,
+    instalment_count INTEGER NOT NULL DEFAULT 4,
+    account_id INTEGER,
+    archived INTEGER DEFAULT 0,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (account_id) REFERENCES accounts(id)
+);
 """
 
 # Default category rules — seeded on first run, editable via UI
@@ -435,6 +449,80 @@ def run_migrations(conn):
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             )
         """)
+
+    # 0.7.0: afterpay_orders table — first-class grouping of Afterpay
+    # instalments so the user can see all active orders at a glance with
+    # paid/unpaid pips per payment. Existing bills named "Afterpay · …" are
+    # backfilled into orders below.
+    if not _table_exists(conn, 'afterpay_orders'):
+        conn.execute("""
+            CREATE TABLE afterpay_orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                store TEXT NOT NULL,
+                total_amount REAL NOT NULL,
+                purchase_date TEXT NOT NULL,
+                instalment_count INTEGER NOT NULL DEFAULT 4,
+                account_id INTEGER,
+                archived INTEGER DEFAULT 0,
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (account_id) REFERENCES accounts(id)
+            )
+        """)
+    # Link columns on scheduled_bills connect each instalment back to its
+    # parent order + records its position in the sequence and whether the
+    # user has marked it paid.
+    if not _column_exists(conn, 'scheduled_bills', 'afterpay_order_id'):
+        conn.execute('ALTER TABLE scheduled_bills ADD COLUMN afterpay_order_id INTEGER')
+    if not _column_exists(conn, 'scheduled_bills', 'afterpay_seq'):
+        conn.execute('ALTER TABLE scheduled_bills ADD COLUMN afterpay_seq INTEGER')
+    if not _column_exists(conn, 'scheduled_bills', 'afterpay_paid'):
+        conn.execute('ALTER TABLE scheduled_bills ADD COLUMN afterpay_paid INTEGER DEFAULT 0')
+    if not _column_exists(conn, 'scheduled_bills', 'afterpay_paid_at'):
+        conn.execute('ALTER TABLE scheduled_bills ADD COLUMN afterpay_paid_at TEXT')
+
+    # Backfill: parse pre-0.7.0 bills with the legacy
+    # "Afterpay · {store} ({seq} of {n})" name shape into proper orders.
+    # Idempotent — only touches bills that aren't already linked.
+    import re as _re
+    backfill_rows = conn.execute(
+        "SELECT id, name, amount, next_date, account_id FROM scheduled_bills "
+        "WHERE afterpay_order_id IS NULL AND name LIKE 'Afterpay · %'"
+    ).fetchall()
+    groups = {}
+    for r in backfill_rows:
+        m = _re.match(r'^Afterpay · (.+?) \((\d+) of (\d+)\)$', r['name'])
+        if not m:
+            continue
+        store = m.group(1)
+        seq = int(m.group(2))
+        count = int(m.group(3))
+        key = (store, count, r['account_id'])
+        groups.setdefault(key, []).append({
+            'id': r['id'], 'seq': seq, 'amount': r['amount'], 'next_date': r['next_date']
+        })
+    today_iso = datetime.now().date().isoformat()
+    for (store, count, account_id), items in groups.items():
+        items.sort(key=lambda x: x['seq'])
+        purchase_date = items[0]['next_date']
+        total = round(sum(abs(x['amount']) for x in items), 2)
+        cur = conn.execute(
+            "INSERT INTO afterpay_orders (store, total_amount, purchase_date, "
+            "instalment_count, account_id) VALUES (?,?,?,?,?)",
+            (store, total, purchase_date, count, account_id)
+        )
+        new_oid = cur.lastrowid
+        for it in items:
+            # Mark already-past instalments as paid — best guess; the user
+            # has presumably been paying them. They can toggle if wrong.
+            already_paid = 1 if it['next_date'] < today_iso else 0
+            paid_at = it['next_date'] if already_paid else None
+            conn.execute(
+                "UPDATE scheduled_bills SET afterpay_order_id=?, afterpay_seq=?, "
+                "afterpay_paid=?, afterpay_paid_at=? WHERE id=?",
+                (new_oid, it['seq'], already_paid, paid_at, it['id'])
+            )
 
 
 def init_db():
