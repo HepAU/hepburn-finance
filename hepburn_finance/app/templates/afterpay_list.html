@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% macro fmt_money(n, dp=2) %}
+{%- if n is none -%}—{%- else -%}
+{%- set abs_n = n if n >= 0 else -n -%}
+{{- ('-' if n < 0 else '') }}${{ '{:,.{}f}'.format(abs_n, dp) }}
+{%- endif -%}
+{% endmacro %}
+
+{% macro short_date(iso) %}
+{%- if iso -%}
+  {%- set parts = iso.split('-') -%}
+  {%- set months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] -%}
+  {{ parts[2]|int }} {{ months[parts[1]|int - 1] }}
+{%- endif -%}
+{% endmacro %}
+
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <div>
+      <h1>Afterpay</h1>
+      <p>
+        {% if total_outstanding > 0 %}
+          Outstanding <strong>{{ fmt_money(total_outstanding) }}</strong>
+          {% if next_payment_date %}
+            · next <strong>{{ fmt_money(next_payment_amount) }}</strong> on
+            <strong>{{ short_date(next_payment_date) }}</strong>
+          {% endif %}
+          {% if due_14d_total > 0 %}
+            · <strong>{{ fmt_money(due_14d_total) }}</strong> due in 14d
+          {% endif %}
+        {% else %}
+          {% if active_count == 0 %}No active orders.{% else %}All paid up.{% endif %}
+        {% endif %}
+      </p>
+    </div>
+    <a class="btn ghost" href="{{ url_for('main.dashboard') }}">← Back to dashboard</a>
+  </div>
+
+  <div class="form-actions" style="margin-top: 0; margin-bottom: 16px;">
+    <div>
+      {% if show_archived %}
+        <a class="btn ghost" href="{{ url_for('main.list_afterpay') }}">
+          Active ({{ active_count }})
+        </a>
+      {% elif archived_count > 0 %}
+        <a class="btn ghost" href="{{ url_for('main.list_afterpay', archived=1) }}">
+          Archived ({{ archived_count }})
+        </a>
+      {% endif %}
+    </div>
+    <div class="form-actions-right">
+      {% if not show_archived %}
+      <form method="POST" action="{{ url_for('main.auto_match_afterpay') }}" style="display:inline;">
+        <button type="submit" class="btn ghost" title="Scan recent Afterpay-tagged transactions and link them to unpaid instalments">
+          ⚡ Auto-match payments
+        </button>
+      </form>
+      {% endif %}
+      <a class="btn primary" href="{{ url_for('main.new_afterpay') }}">+ New order</a>
+    </div>
+  </div>
+
+  {% if not orders %}
+  <div class="form-card" style="text-align:center; padding: 32px 16px;">
+    <p style="margin:0; color: var(--text-3);">
+      {% if show_archived %}No archived orders.{% else %}No active Afterpay orders. Tap <strong>+ New order</strong> to add one.{% endif %}
+    </p>
+  </div>
+  {% endif %}
+
+  {% for row in orders %}
+  {% set o = row.order %}
+  <div class="form-card" style="padding: 12px 14px; margin-bottom: 10px;">
+    <div style="display:flex; align-items:flex-start; gap: 12px;">
+      <div style="flex: 1; min-width: 0;">
+        <div style="display:flex; align-items:baseline; gap:8px; flex-wrap: wrap;">
+          <strong style="font-size: 15px;">{{ o.store }}</strong>
+          {% if row.is_complete %}
+            <span class="pill" style="background: rgba(52,211,153,0.12); color: #34d399; font-size: 10px; padding: 2px 7px; border-radius: 999px;">PAID OFF</span>
+          {% elif row.overdue_count > 0 %}
+            <span class="pill" style="background: rgba(248,113,113,0.15); color: #f87171; font-size: 10px; padding: 2px 7px; border-radius: 999px;">{{ row.overdue_count }} OVERDUE</span>
+          {% endif %}
+        </div>
+        <div style="font-size: 11px; color: var(--text-3); margin-top: 2px;">
+          {{ short_date(o.purchase_date) }}
+          {% if o.account_name %} · {{ o.account_name }}{% endif %}
+          · {{ row.paid_count }}/{{ o.instalment_count }} paid
+        </div>
+      </div>
+      <div style="text-align: right; white-space: nowrap;">
+        <div style="font-size: 15px; font-weight: 500;">{{ fmt_money(o.total_amount) }}</div>
+        {% if not row.is_complete %}
+        <div style="font-size: 11px; color: var(--text-3); margin-top: 2px;">
+          {{ fmt_money(row.outstanding) }} left
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Instalment pips — one button per payment, tap to toggle paid/unpaid #}
+    <div style="display:flex; gap: 4px; margin-top: 10px; flex-wrap: wrap;">
+      {% for i in row.instalments %}
+        {% set is_overdue = (not i.afterpay_paid) and (i.next_date < today_iso if today_iso is defined else false) %}
+        <form method="POST" action="{{ url_for('main.toggle_afterpay_payment', bill_id=i.id) }}" style="margin:0; flex:1; min-width:0;">
+          <button type="submit" class="afterpay-pip {% if i.afterpay_paid %}paid{% elif is_overdue %}overdue{% endif %}"
+            title="{% if i.afterpay_paid %}Paid {{ i.afterpay_paid_at[:10] if i.afterpay_paid_at else '' }} — tap to mark unpaid{% else %}Tap to mark as paid{% endif %}"
+            style="width:100%; padding: 6px 4px; border-radius: 8px; border: 1px solid var(--bd); background: var(--bg-1); color: var(--text-2); cursor: pointer; font-size: 11px; line-height: 1.2; font-family: inherit;
+              {% if i.afterpay_paid %}background: rgba(52,211,153,0.12); border-color: rgba(52,211,153,0.35); color: #34d399;{% endif %}
+              {% if is_overdue %}background: rgba(248,113,113,0.10); border-color: rgba(248,113,113,0.35); color: #f87171;{% endif %}">
+            <div style="font-weight: 600;">{{ '%.2f'|format(i.amount|abs) }}</div>
+            <div style="font-size: 10px; opacity: 0.85;">
+              {% if i.afterpay_paid %}✓ {{ short_date(i.afterpay_paid_at[:10] if i.afterpay_paid_at else i.next_date) }}
+              {% else %}{{ short_date(i.next_date) }}{% endif %}
+            </div>
+          </button>
+        </form>
+      {% endfor %}
+    </div>
+
+    <div style="display:flex; justify-content: flex-end; gap: 6px; margin-top: 10px;">
+      {% if o.archived %}
+        <form method="POST" action="{{ url_for('main.unarchive_afterpay', oid=o.id) }}" style="margin:0;">
+          <button type="submit" class="btn ghost" style="font-size: 11px; padding: 4px 10px;">Unarchive</button>
+        </form>
+      {% else %}
+        {% if row.is_complete %}
+        <form method="POST" action="{{ url_for('main.archive_afterpay', oid=o.id) }}" style="margin:0;">
+          <button type="submit" class="btn ghost" style="font-size: 11px; padding: 4px 10px;">Archive</button>
+        </form>
+        {% endif %}
+      {% endif %}
+      <form method="POST" action="{{ url_for('main.delete_afterpay', oid=o.id) }}" style="margin:0;"
+            onsubmit="return confirm('Delete this Afterpay order and all its instalments? This can\\'t be undone.');">
+        <button type="submit" class="btn ghost" style="font-size: 11px; padding: 4px 10px; color: #f87171;">Delete</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
